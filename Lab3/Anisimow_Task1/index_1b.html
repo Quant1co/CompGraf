@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Lab 3: Flood Fill with Pattern</title>
+    <style>
+        canvas { border: 1px solid black; }
+        .container { display: flex; justify-content: space-between; align-items: flex-start; margin: 10px; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        .instructions { text-align: right; }
+        .instructions ul { list-style-type: none; padding: 0; }
+        .instructions li { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div class="container">
+        <div class="controls">
+            <label for="patternImage">Выберите изображение для заливки: </label>
+            <input type="file" id="patternImage" accept="image/*">
+            <button id="clear">Очистить холст</button>
+        </div>
+        <div class="instructions">
+            <ul>
+                <li>1. Рисуйте контур левой кнопкой мыши (удерживайте).</li>
+                <li>2. Загрузите изображение для узора.</li>
+                <li>3. Кликните правой кнопкой для заливки узором.</li>
+                <li>4. Убедитесь, что контур замкнут!</li>
+            </ul>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const patternInput = document.getElementById('patternImage');
+        let isDrawing = false;
+        let lastX = 0, lastY = 0;
+        let patternImage = null;
+        let patternData = null;
+
+        // Цвета (в формате RGBA)
+        const boundaryColor = [0, 0, 0, 255]; // Черный для границы
+        const backgroundColor = [255, 255, 255, 255]; // Белый фон
+
+        // Инициализация холста
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Функция сравнения цветов
+        function colorsEqual(c1, c2) {
+            return c1[0] === c2[0] && c1[1] === c2[1] && c1[2] === c2[2] && c1[3] === c2[3];
+        }
+
+        // Получение ImageData для всего холста
+        function getImageData() {
+            return ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
+
+        // Обновление холста из ImageData
+        function putImageData(imageData) {
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Загрузка изображения для узора
+        patternInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = () => {
+                    const patternCanvas = document.createElement('canvas');
+                    patternCanvas.width = img.width;
+                    patternCanvas.height = img.height;
+                    const patternCtx = patternCanvas.getContext('2d');
+                    patternCtx.drawImage(img, 0, 0);
+                    patternImage = img;
+                    patternData = patternCtx.getImageData(0, 0, img.width, img.height);
+                    console.log('Изображение загружено:', img.width, 'x', img.height);
+                };
+                img.src = URL.createObjectURL(file);
+            }
+        });
+
+        // Рисование контура
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Левая кнопка для рисования
+                isDrawing = true;
+                lastX = e.offsetX;
+                lastY = e.offsetY;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) {
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                lastX = e.offsetX;
+                lastY = e.offsetY;
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                isDrawing = false;
+            }
+        });
+
+        // Заливка по правому клику
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (!patternData) {
+                console.log('Сначала загрузите изображение!');
+                return;
+            }
+            const x = Math.floor(e.offsetX);
+            const y = Math.floor(e.offsetY);
+            const imageData = getImageData();
+            const data = imageData.data;
+            const width = canvas.width;
+            const idx = (y * width + x) * 4;
+            const targetColor = [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]];
+
+            if (colorsEqual(targetColor, boundaryColor)) {
+                console.log("Клик на границе, заливка отменена");
+                return;
+            }
+
+            const filledPixels = scanlineFillWithPattern(x, y, imageData, targetColor);
+            console.log(`Закрашено пикселей: ${filledPixels}`);
+            putImageData(imageData);
+        });
+
+        // Кнопка очистки
+        document.getElementById('clear').addEventListener('click', () => {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // Итеративный scanline fill с узором
+        function scanlineFillWithPattern(seedX, seedY, imageData, targetColor) {
+            const data = imageData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+            const patternWidth = patternData.width;
+            const patternHeight = patternData.height;
+            const patternPixels = patternData.data;
+            const stack = [{ x: seedX, y: seedY }];
+            let filledPixels = 0;
+            const maxStackSize = 10000; // Ограничение размера стека
+
+            while (stack.length > 0) {
+                const { x: seedX, y: seedY } = stack.pop();
+
+                if (seedX < 0 || seedX >= width || seedY < 0 || seedY >= height) {
+                    continue;
+                }
+
+                const idx = (seedY * width + seedX) * 4;
+                const currentColor = [data[idx], data[idx + 1], data[idx + 2], data[idx + 3]];
+
+                if (!colorsEqual(currentColor, targetColor) || colorsEqual(currentColor, boundaryColor)) {
+                    continue;
+                }
+
+                let leftX = seedX;
+                let idxLeft = (seedY * width + leftX) * 4;
+                while (leftX >= 0 && colorsEqual([data[idxLeft], data[idxLeft + 1], data[idxLeft + 2], data[idxLeft + 3]], targetColor)) {
+                    leftX--;
+                    idxLeft = (seedY * width + leftX) * 4;
+                }
+                leftX++;
+
+                let rightX = seedX;
+                let idxRight = (seedY * width + rightX) * 4;
+                while (rightX < width && colorsEqual([data[idxRight], data[idxRight + 1], data[idxRight + 2], data[idxRight + 3]], targetColor)) {
+                    rightX++;
+                    idxRight = (seedY * width + rightX) * 4;
+                }
+                rightX--;
+
+                // Закрашиваем линию
+                for (let i = leftX; i <= rightX; i++) {
+                    const pixelIdx = (seedY * width + i) * 4;
+                    const patternX = i % patternWidth;
+                    const patternY = seedY % patternHeight;
+                    const patternIdx = (patternY * patternWidth + patternX) * 4;
+
+                    if (patternX < patternWidth && patternY < patternHeight) {
+                        data[pixelIdx] = patternPixels[patternIdx];
+                        data[pixelIdx + 1] = patternPixels[patternIdx + 1];
+                        data[pixelIdx + 2] = patternPixels[patternIdx + 2];
+                        data[pixelIdx + 3] = patternPixels[patternIdx + 3];
+                        filledPixels++;
+                    }
+                }
+
+                // Добавляем соседние строки в стек
+                if (seedY > 0) {
+                    for (let i = leftX; i <= rightX; i++) {
+                        if (stack.length < maxStackSize) {
+                            stack.push({ x: i, y: seedY - 1 });
+                        }
+                    }
+                }
+                if (seedY < height - 1) {
+                    for (let i = leftX; i <= rightX; i++) {
+                        if (stack.length < maxStackSize) {
+                            stack.push({ x: i, y: seedY + 1 });
+                        }
+                    }
+                }
+            }
+
+            return filledPixels;
+        }
+    </script>
+</body>
+</html>
