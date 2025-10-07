@@ -33,7 +33,7 @@ def rasterize_triangle(img_size, verts, colors):
             bary = barycentric_coords(p, a, b, c)
             if bary is None:
                 continue
-            if (bary >= -1e-6).all() and (bary <= 1+1e-6).all():
+            if (bary >= -1e-6).all():
                 col = bary[0]*colors[0] + bary[1]*colors[1] + bary[2]*colors[2]
                 out[yy, xx] = np.clip(col, 0, 255).astype(np.uint8)
     return out
