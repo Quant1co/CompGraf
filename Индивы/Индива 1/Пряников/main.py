@@ -1,16 +1,32 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as PolygonPatch
-import math
+import matplotlib.animation as animation
+import numpy as np
+from typing import List, Tuple, Optional
+from dataclasses import dataclass
+from enum import Enum
+
+# --- Типы данных ---
+Point = Tuple[float, float]
+Triangle = List[Point]
+
+class VertexType(Enum):
+    CONVEX = "convex"
+    REFLEX = "reflex"  # вогнутая
+    EAR = "ear"
+
+@dataclass
+class Vertex:
+    """Класс для хранения информации о вершине"""
+    index: int
+    point: Point
+    vertex_type: VertexType
+    is_ear: bool = False
 
 # --- Вспомогательные геометрические функции ---
 
-def calculate_polygon_area(polygon):
-    """
-    Вычисляет ориентированную площадь полигона (формула шнурков).
-    Знак результата говорит о направлении обхода вершин:
-    > 0 для обхода против часовой стрелки (CCW)
-    < 0 для обхода по часовой стрелке (CW)
-    """
+def calculate_polygon_area(polygon: List[Point]) -> float:
+    """Вычисляет ориентированную площадь полигона (формула шнурков)."""
     n = len(polygon)
     area = 0.0
     for i in range(n):
@@ -19,164 +35,324 @@ def calculate_polygon_area(polygon):
         area -= polygon[j][0] * polygon[i][1]
     return area / 2.0
 
-def is_ccw(polygon):
+def is_ccw(polygon: List[Point]) -> bool:
     """Проверяет, что полигон задан в порядке против часовой стрелки."""
     return calculate_polygon_area(polygon) > 0
 
-def cross_product(p1, p2, p3):
-    """
-    Вычисляет псевдоскалярное (векторное) произведение векторов (p2-p1) и (p3-p2).
-    Знак результата определяет направление поворота:
-    > 0: поворот налево (вершина p2 выпуклая для CCW полигона)
-    < 0: поворот направо (вершина p2 вогнутая для CCW полигона)
-    = 0: точки коллинеарны
-    """
+def cross_product(p1: Point, p2: Point, p3: Point) -> float:
+    """Вычисляет псевдоскалярное произведение векторов."""
     return (p2[0] - p1[0]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[0] - p2[0])
 
-def is_point_in_triangle(pt, v1, v2, v3):
-    """
-    Проверяет, находится ли точка pt внутри треугольника (v1, v2, v3).
-    Использует барицентрические координаты (через знаки векторного произведения).
-    Точка внутри, если она находится с одной стороны от всех трех ребер.
-    """
-    # Для CCW треугольника точка должна быть "слева" от каждого ребра
+def is_point_in_triangle(pt: Point, v1: Point, v2: Point, v3: Point) -> bool:
+    """Проверяет, находится ли точка pt внутри треугольника."""
+    eps = 1e-10  # Небольшой допуск для численной стабильности
+    
     d1 = cross_product(v1, v2, pt)
     d2 = cross_product(v2, v3, pt)
     d3 = cross_product(v3, v1, pt)
     
-    # Если все знаки одинаковы (и не 0), точка внутри.
-    # Допускаем точки на границе (>= 0)
-    return (d1 >= 0 and d2 >= 0 and d3 >= 0) or \
-           (d1 <= 0 and d2 <= 0 and d3 <= 0)
+    # Проверяем, что все знаки одинаковы
+    has_neg = (d1 < -eps) or (d2 < -eps) or (d3 < -eps)
+    has_pos = (d1 > eps) or (d2 > eps) or (d3 > eps)
+    
+    return not (has_neg and has_pos)
 
+def is_simple_polygon(polygon: List[Point]) -> bool:
+    """Проверяет, что полигон простой (без самопересечений)."""
+    n = len(polygon)
+    for i in range(n):
+        for j in range(i + 2, n):
+            if j == (i + n - 1) % n:  # Смежные рёбра
+                continue
+            if segments_intersect(polygon[i], polygon[(i+1)%n], 
+                                 polygon[j], polygon[(j+1)%n]):
+                return False
+    return True
 
-# --- Основной алгоритм Ear Clipping ---
+def segments_intersect(p1: Point, p2: Point, p3: Point, p4: Point) -> bool:
+    """Проверяет пересечение двух отрезков."""
+    def ccw(A, B, C):
+        return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+    
+    return ccw(p1,p3,p4) != ccw(p2,p3,p4) and ccw(p1,p2,p3) != ccw(p1,p2,p4)
 
-def triangulate_ear_clipping(polygon):
-    """
-    Триангулирует простой многоугольник методом отрезания "ушей".
-    :param polygon: список вершин [(x1, y1), (x2, y2), ...]
-    :return: список треугольников [[(x1,y1), (x2,y2), (x3,y3)], ...]
-    """
-    if len(polygon) < 3:
-        raise ValueError("Полигон должен иметь как минимум 3 вершины.")
-    if len(polygon) == 3:
-        return [polygon]
+# --- Оптимизированный алгоритм Ear Clipping ---
 
-    # Создаем рабочую копию, чтобы не изменять исходный список
-    local_polygon = list(polygon)
-
-    # Убедимся, что обход против часовой стрелки (CCW)
-    if not is_ccw(local_polygon):
-        local_polygon.reverse()
+class EarClippingTriangulator:
+    def __init__(self, polygon: List[Point], validate: bool = True):
+        """
+        Инициализация триангулятора.
+        :param polygon: список вершин полигона
+        :param validate: проверять ли корректность полигона
+        """
+        if len(polygon) < 3:
+            raise ValueError("Полигон должен иметь как минимум 3 вершины.")
         
-    triangles = []
-    
-    # Используем индексы для безопасной работы с изменяющимся списком
-    vertex_indices = list(range(len(local_polygon)))
-    
-    # Безопасный счетчик, чтобы избежать бесконечного цикла при некорректных данных
-    iterations = 0
-    max_iterations = len(local_polygon) * 2 
-
-    while len(vertex_indices) > 3 and iterations < max_iterations:
-        iterations += 1
-        found_ear = False
-        for i in range(len(vertex_indices)):
-            # Получаем индексы предыдущей, текущей и следующей вершин
-            prev_idx_ptr = (i - 1 + len(vertex_indices)) % len(vertex_indices)
-            curr_idx_ptr = i
-            next_idx_ptr = (i + 1) % len(vertex_indices)
-
-            p_prev_idx = vertex_indices[prev_idx_ptr]
-            p_curr_idx = vertex_indices[curr_idx_ptr]
-            p_next_idx = vertex_indices[next_idx_ptr]
-
-            p_prev = local_polygon[p_prev_idx]
-            p_curr = local_polygon[p_curr_idx]
-            p_next = local_polygon[p_next_idx]
-
-            # 1. Проверяем, является ли вершина выпуклой (левый поворот для CCW)
-            if cross_product(p_prev, p_curr, p_next) < 0:
-                continue # Это вогнутая вершина, не может быть "ухом"
-
-            # 2. Проверяем, не лежат ли другие вершины внутри этого треугольника
-            is_ear = True
-            for j in range(len(local_polygon)):
-                # Проверяем только те вершины, которые не являются вершинами "уха"
-                if j not in (p_prev_idx, p_curr_idx, p_next_idx):
-                    if is_point_in_triangle(local_polygon[j], p_prev, p_curr, p_next):
-                        is_ear = False
-                        break
+        self.original_polygon = polygon.copy()
+        self.polygon = polygon.copy()
+        
+        if validate and not is_simple_polygon(self.polygon):
+            raise ValueError("Полигон имеет самопересечения.")
+        
+        # Обеспечиваем CCW ориентацию
+        if not is_ccw(self.polygon):
+            self.polygon.reverse()
+        
+        self.vertices = []
+        self.triangles = []
+        self.triangulation_steps = []  # Для анимации
+        
+    def classify_vertices(self):
+        """Классифицирует вершины на выпуклые и вогнутые."""
+        n = len(self.polygon)
+        self.vertices = []
+        
+        for i in range(n):
+            prev_idx = (i - 1) % n
+            next_idx = (i + 1) % n
             
-            if is_ear:
-                # Нашли "ухо"!
-                triangles.append([p_prev, p_curr, p_next])
-                # "Отрезаем" его, удаляя центральную вершину из списка индексов
-                vertex_indices.pop(curr_idx_ptr)
-                found_ear = True
-                break # Начинаем поиск заново с уменьшенным полигоном
-        
-        if not found_ear:
-             # Если за целый проход не нашли ухо, возможно, полигон не простой
-             # или есть коллинеарные вершины. В простом алгоритме это может вызвать зацикливание.
-             print("Не удалось найти ухо. Возможно, полигон сложный или имеет вырожденные случаи.")
-             break
-
-    # Добавляем последний оставшийся треугольник
-    if len(vertex_indices) == 3:
-        last_triangle = [local_polygon[i] for i in vertex_indices]
-        triangles.append(last_triangle)
-        
-    return triangles
-
-# --- Функция для визуализации ---
-
-def plot_triangulation(polygon, triangles):
-    """Рисует полигон и его триангуляцию."""
-    fig, ax = plt.subplots()
+            cp = cross_product(self.polygon[prev_idx], 
+                             self.polygon[i], 
+                             self.polygon[next_idx])
+            
+            vertex_type = VertexType.CONVEX if cp >= 0 else VertexType.REFLEX
+            
+            vertex = Vertex(
+                index=i,
+                point=self.polygon[i],
+                vertex_type=vertex_type,
+                is_ear=False
+            )
+            self.vertices.append(vertex)
     
-    # Рисуем исходный полигон
-    poly_patch = PolygonPatch(polygon, facecolor='none', edgecolor='blue', linewidth=2, label='Исходный полигон')
-    ax.add_patch(poly_patch)
-    
-    # Рисуем каждый треугольник
-    for tri in triangles:
-        tri_patch = PolygonPatch(tri, facecolor='red', alpha=0.3, edgecolor='black')
-        ax.add_patch(tri_patch)
+    def is_ear(self, vertex_idx: int) -> bool:
+        """Проверяет, является ли вершина "ухом"."""
+        n = len(self.vertices)
+        if n < 3:
+            return False
         
-    # Настраиваем отображение
-    all_x = [p[0] for p in polygon]
-    all_y = [p[1] for p in polygon]
-    ax.set_xlim(min(all_x) - 1, max(all_x) + 1)
-    ax.set_ylim(min(all_y) - 1, max(all_y) + 1)
-    ax.set_aspect('equal', adjustable='box')
-    plt.title("Триангуляция методом вторгающихся вершин")
-    plt.grid(True)
+        prev_idx = (vertex_idx - 1) % n
+        next_idx = (vertex_idx + 1) % n
+        
+        v_prev = self.vertices[prev_idx].point
+        v_curr = self.vertices[vertex_idx].point
+        v_next = self.vertices[next_idx].point
+        
+        # Вершина должна быть выпуклой
+        if self.vertices[vertex_idx].vertex_type != VertexType.CONVEX:
+            return False
+        
+        # Проверяем, что никакие другие вершины не лежат внутри треугольника
+        for i, vertex in enumerate(self.vertices):
+            if i in (prev_idx, vertex_idx, next_idx):
+                continue
+            
+            # Проверяем только вогнутые вершины (оптимизация)
+            if vertex.vertex_type == VertexType.REFLEX:
+                if is_point_in_triangle(vertex.point, v_prev, v_curr, v_next):
+                    return False
+        
+        return True
+    
+    def find_ears(self):
+        """Находит все "уши" в текущем полигоне."""
+        for i in range(len(self.vertices)):
+            if self.vertices[i].vertex_type == VertexType.CONVEX:
+                self.vertices[i].is_ear = self.is_ear(i)
+                if self.vertices[i].is_ear:
+                    self.vertices[i].vertex_type = VertexType.EAR
+    
+    def triangulate(self) -> List[Triangle]:
+        """Выполняет триангуляцию полигона."""
+        if len(self.polygon) == 3:
+            return [self.polygon]
+        
+        self.classify_vertices()
+        self.find_ears()
+        
+        iterations = 0
+        max_iterations = len(self.polygon) * 2
+        
+        while len(self.vertices) > 3 and iterations < max_iterations:
+            iterations += 1
+            
+            # Находим первое "ухо"
+            ear_found = False
+            for i in range(len(self.vertices)):
+                if self.vertices[i].is_ear:
+                    prev_idx = (i - 1) % len(self.vertices)
+                    next_idx = (i + 1) % len(self.vertices)
+                    
+                    # Создаём треугольник
+                    triangle = [
+                        self.vertices[prev_idx].point,
+                        self.vertices[i].point,
+                        self.vertices[next_idx].point
+                    ]
+                    self.triangles.append(triangle)
+                    
+                    # Сохраняем шаг для анимации
+                    self.triangulation_steps.append({
+                        'polygon': [v.point for v in self.vertices],
+                        'triangle': triangle,
+                        'removed_vertex': i
+                    })
+                    
+                    # Удаляем вершину
+                    self.vertices.pop(i)
+                    
+                    # Обновляем классификацию соседних вершин
+                    if len(self.vertices) > 2:
+                        new_prev_idx = (prev_idx if prev_idx < i else prev_idx - 1) % len(self.vertices)
+                        new_next_idx = (next_idx if next_idx < i else next_idx - 1) % len(self.vertices)
+                        
+                        # Переклассифицируем соседние вершины
+                        for idx in [new_prev_idx, new_next_idx]:
+                            if 0 <= idx < len(self.vertices):
+                                self.update_vertex_classification(idx)
+                    
+                    ear_found = True
+                    break
+            
+            if not ear_found:
+                print(f"Предупреждение: не найдено ухо на итерации {iterations}")
+                break
+        
+        # Добавляем последний треугольник
+        if len(self.vertices) == 3:
+            triangle = [v.point for v in self.vertices]
+            self.triangles.append(triangle)
+            self.triangulation_steps.append({
+                'polygon': triangle,
+                'triangle': triangle,
+                'removed_vertex': -1
+            })
+        
+        return self.triangles
+    
+    def update_vertex_classification(self, vertex_idx: int):
+        """Обновляет классификацию вершины после удаления соседней."""
+        n = len(self.vertices)
+        if n < 3:
+            return
+        
+        prev_idx = (vertex_idx - 1) % n
+        next_idx = (vertex_idx + 1) % n
+        
+        cp = cross_product(
+            self.vertices[prev_idx].point,
+            self.vertices[vertex_idx].point,
+            self.vertices[next_idx].point
+        )
+        
+        old_type = self.vertices[vertex_idx].vertex_type
+        new_type = VertexType.CONVEX if cp >= 0 else VertexType.REFLEX
+        
+        self.vertices[vertex_idx].vertex_type = new_type
+        
+        # Проверяем, является ли вершина ухом
+        if new_type == VertexType.CONVEX:
+            self.vertices[vertex_idx].is_ear = self.is_ear(vertex_idx)
+            if self.vertices[vertex_idx].is_ear:
+                self.vertices[vertex_idx].vertex_type = VertexType.EAR
+        else:
+            self.vertices[vertex_idx].is_ear = False
+
+# --- Улучшенная визуализация ---
+
+def plot_triangulation_enhanced(polygon: List[Point], triangles: List[Triangle], 
+                               show_numbers: bool = True, save_path: Optional[str] = None):
+    """Улучшенная визуализация с номерами вершин и цветовой градацией."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    
+    # Левый график - исходный полигон
+    ax1.set_title("Исходный полигон")
+    poly_patch = PolygonPatch(polygon, facecolor='lightblue', 
+                              edgecolor='blue', linewidth=2, alpha=0.5)
+    ax1.add_patch(poly_patch)
+    
+    # Добавляем номера вершин
+    if show_numbers:
+        for i, (x, y) in enumerate(polygon):
+            ax1.plot(x, y, 'ro', markersize=8)
+            ax1.text(x, y, str(i), fontsize=12, ha='right', va='bottom')
+    
+    # Правый график - триангуляция
+    ax2.set_title(f"Триангуляция ({len(triangles)} треугольников)")
+    
+    # Цветовая карта для треугольников
+    colors = plt.cm.rainbow(np.linspace(0, 1, len(triangles)))
+    
+    for i, (tri, color) in enumerate(zip(triangles, colors)):
+        tri_patch = PolygonPatch(tri, facecolor=color, alpha=0.3, 
+                                 edgecolor='black', linewidth=1)
+        ax2.add_patch(tri_patch)
+        
+        # Центр треугольника
+        cx = sum(p[0] for p in tri) / 3
+        cy = sum(p[1] for p in tri) / 3
+        ax2.text(cx, cy, str(i), fontsize=8, ha='center', va='center')
+    
+    # Настройка осей
+    for ax in [ax1, ax2]:
+        all_x = [p[0] for p in polygon]
+        all_y = [p[1] for p in polygon]
+        margin = 0.5
+        ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
+        ax.set_ylim(min(all_y) - margin, max(all_y) + margin)
+        ax.set_aspect('equal')
+        ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    
     plt.show()
 
-# --- Пример использования ---
+# --- Примеры использования ---
+
+def test_examples():
+    """Тестирует алгоритм на различных примерах."""
+    
+    examples = {
+        "Простой треугольник": [(0, 0), (4, 0), (2, 3)],
+        
+        "Квадрат": [(0, 0), (2, 0), (2, 2), (0, 2)],
+        
+        "Звезда": [(0, 0), (4, -1), (5, 3), (2, 2), (1, 5), (-2, 3)],
+        
+        "L-образная фигура": [(0, 0), (3, 0), (3, 1), (1, 1), (1, 3), (0, 3)],
+        
+        "Сложный полигон": [
+            (0, 0), (2, 0), (2, 1), (3, 1), (3, 0), (5, 0),
+            (5, 3), (3, 3), (3, 2), (2, 2), (2, 3), (0, 3)
+        ]
+    }
+    
+    for name, polygon in examples.items():
+        print(f"\n{'='*50}")
+        print(f"Тестируем: {name}")
+        print(f"Вершин: {len(polygon)}")
+        
+        try:
+            triangulator = EarClippingTriangulator(polygon, validate=True)
+            triangles = triangulator.triangulate()
+            
+            print(f"Получено треугольников: {len(triangles)}")
+            print(f"Ожидалось треугольников: {len(polygon) - 2}")
+            
+            if len(triangles) == len(polygon) - 2:
+                print("✓ Триангуляция успешна!")
+            else:
+                print("✗ Неверное количество треугольников!")
+            
+            # Визуализация
+            plot_triangulation_enhanced(polygon, triangles, show_numbers=True)
+            
+        except Exception as e:
+            print(f"✗ Ошибка: {e}")
 
 if __name__ == '__main__':
-    # Пример невыпуклого полигона (похож на звезду или стрелку)
-    # Задан в порядке обхода по часовой стрелке (алгоритм сам это определит и исправит)
-    my_polygon = [
-        (0, 0), (4, -1), (5, 3), (2, 2), (1, 5), (-2, 3)
-    ]
-
-    print("Исходный полигон:", my_polygon)
-
-    # Выполняем триангуляцию
-    try:
-        result_triangles = triangulate_ear_clipping(my_polygon)
-        print(f"\nНайдено {len(result_triangles)} треугольников:")
-        for i, t in enumerate(result_triangles):
-            print(f"Треугольник {i+1}: {t}")
-
-        # Визуализируем результат
-        plot_triangulation(my_polygon, result_triangles)
-        
-    except ValueError as e:
-        print(f"Ошибка: {e}")
-    except Exception as e:
-        print(f"Произошла непредвиденная ошибка: {e}")
+    # Запускаем тесты
+    test_examples()
