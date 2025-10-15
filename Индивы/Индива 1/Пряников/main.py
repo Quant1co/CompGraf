@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from typing import List, Tuple, Optional
 import copy
 
@@ -499,6 +500,325 @@ class IntrudingVertexTriangulation:
         plt.tight_layout()
         plt.show()
 
+
+class InteractivePolygonBuilder:
+    """
+    Интерактивный построитель полигона.
+    Позволяет создавать полигон кликами мыши и триангулировать его.
+    """
+    
+    def __init__(self):
+        self.points = []  # список точек полигона
+        self.fig = None
+        self.ax = None
+        self.line = None  # линия полигона
+        self.point_markers = None  # маркеры точек
+        self.is_closed = False  # флаг закрытия полигона
+        self.triangulator = None  # объект триангулятора
+        self.triangulation_lines = []  # список линий триангуляции
+        self.triangulation_patches = []  # список патчей (заливок) триангуляции
+        self.annotations = []  # список аннотаций для точек
+        
+    def start(self):
+        """Запуск интерактивного режима построения полигона"""
+        
+        # Создаём окно
+        self.fig, self.ax = plt.subplots(figsize=(10, 8))
+        self.ax.set_title('ИНТЕРАКТИВНОЕ ПОСТРОЕНИЕ ПОЛИГОНА\n'
+                          'Левый клик - добавить точку | Правый клик - замкнуть полигон', 
+                          fontsize=12, fontweight='bold')
+        self.ax.set_xlabel('X')
+        self.ax.set_ylabel('Y')
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_aspect('equal')
+        
+        # Устанавливаем границы области
+        self.ax.set_xlim(-1, 11)
+        self.ax.set_ylim(-1, 11)
+        
+        # Инициализируем пустые линии
+        self.line, = self.ax.plot([], [], 'b-', linewidth=2)
+        self.point_markers, = self.ax.plot([], [], 'ro', markersize=8)
+        
+        # Создаём кнопки управления
+        self._create_buttons()
+        
+        # Подключаем обработчики событий
+        self.cid = self.fig.canvas.mpl_connect('button_press_event', self.on_click)
+        
+        # Инструкция
+        self.info_text = self.ax.text(0.02, 0.98, 
+                                      'Точек: 0\nСтатус: Построение', 
+                                      transform=self.ax.transAxes,
+                                      verticalalignment='top',
+                                      bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        
+        plt.show()
+    
+    def _create_buttons(self):
+        """Создание кнопок управления"""
+        
+        # Кнопка "Очистить"
+        ax_clear = plt.axes([0.7, 0.05, 0.1, 0.04])
+        self.btn_clear = Button(ax_clear, 'Очистить')
+        self.btn_clear.on_clicked(self.clear)
+        
+        # Кнопка "Триангулировать"
+        ax_triangulate = plt.axes([0.81, 0.05, 0.15, 0.04])
+        self.btn_triangulate = Button(ax_triangulate, 'Триангулировать')
+        self.btn_triangulate.on_clicked(self.triangulate)
+        
+        # Кнопка "Демо"
+        ax_demo = plt.axes([0.59, 0.05, 0.1, 0.04])
+        self.btn_demo = Button(ax_demo, 'Демо')
+        self.btn_demo.on_clicked(self.load_demo)
+    
+    def on_click(self, event):
+        """Обработчик клика мыши"""
+        
+        # Проверяем, что клик был в области графика
+        if event.inaxes != self.ax:
+            return
+        
+        # Если полигон уже замкнут, не добавляем новые точки
+        if self.is_closed:
+            return
+        
+        # Левый клик - добавляем точку
+        if event.button == 1:  # левая кнопка мыши
+            self.add_point(event.xdata, event.ydata)
+        
+        # Правый клик - замыкаем полигон
+        elif event.button == 3:  # правая кнопка мыши
+            self.close_polygon()
+    
+    def add_point(self, x, y):
+        """Добавление новой точки к полигону"""
+        
+        # Добавляем точку
+        self.points.append((x, y))
+        
+        # Обновляем визуализацию
+        self.update_display()
+        
+        # Обновляем информацию
+        self.info_text.set_text(f'Точек: {len(self.points)}\nСтатус: Построение')
+    
+    def close_polygon(self):
+        """Замыкание полигона"""
+        
+        if len(self.points) < 3:
+            self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                                   f'Статус: Нужно минимум 3 точки!')
+            return
+        
+        # Проверяем на самопересечения
+        if self.has_self_intersections():
+            self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                                   f'Статус: Полигон имеет самопересечения!')
+            return
+        
+        self.is_closed = True
+        
+        # Добавляем первую точку в конец для замыкания визуально
+        if self.points and self.points[0] != self.points[-1]:
+            xs = [p[0] for p in self.points] + [self.points[0][0]]
+            ys = [p[1] for p in self.points] + [self.points[0][1]]
+            self.line.set_data(xs, ys)
+        
+        # Обновляем информацию
+        self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                               f'Статус: Полигон замкнут')
+        
+        self.fig.canvas.draw()
+    
+    def has_self_intersections(self):
+        """Проверка на самопересечения полигона"""
+        
+        n = len(self.points)
+        if n < 4:
+            return False
+        
+        # Проверяем пересечение каждого ребра с каждым
+        for i in range(n):
+            p1 = self.points[i]
+            p2 = self.points[(i + 1) % n]
+            
+            for j in range(i + 2, n):
+                # Не проверяем соседние рёбра
+                if (j == (i - 1) % n) or ((j + 1) % n == i):
+                    continue
+                
+                p3 = self.points[j]
+                p4 = self.points[(j + 1) % n]
+                
+                if self.segments_intersect(p1, p2, p3, p4):
+                    return True
+        
+        return False
+    
+    def segments_intersect(self, p1, p2, p3, p4):
+        """Проверка пересечения двух отрезков"""
+        
+        def ccw(A, B, C):
+            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+        
+        return ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4)
+    
+    def update_display(self):
+        """Обновление отображения полигона"""
+        
+        if not self.points:
+            return
+        
+        # Обновляем линию
+        xs = [p[0] for p in self.points]
+        ys = [p[1] for p in self.points]
+        
+        if self.is_closed and len(self.points) > 0:
+            xs.append(self.points[0][0])
+            ys.append(self.points[0][1])
+        
+        self.line.set_data(xs, ys)
+        
+        # Обновляем точки
+        self.point_markers.set_data([p[0] for p in self.points], 
+                                   [p[1] for p in self.points])
+        
+        # Удаляем старые аннотации
+        for ann in self.annotations:
+            ann.remove()
+        self.annotations = []
+        
+        # Добавляем новые аннотации к точкам
+        for i, (x, y) in enumerate(self.points):
+            ann = self.ax.annotate(f'{i}', (x, y), 
+                                  xytext=(5, 5), textcoords='offset points',
+                                  fontsize=10)
+            self.annotations.append(ann)
+        
+        self.fig.canvas.draw()
+    
+    def clear(self, event=None):
+        """Очистка всех точек и начало заново"""
+        
+        # Очищаем данные
+        self.points = []
+        self.is_closed = False
+        self.line.set_data([], [])
+        self.point_markers.set_data([], [])
+        
+        # Удаляем все линии триангуляции
+        for line in self.triangulation_lines:
+            line.remove()
+        self.triangulation_lines = []
+        
+        # Удаляем все заливки триангуляции
+        for patch in self.triangulation_patches:
+            patch.remove()
+        self.triangulation_patches = []
+        
+        # Удаляем все аннотации
+        for ann in self.annotations:
+            ann.remove()
+        self.annotations = []
+        
+        # Очищаем все патчи (на всякий случай)
+        for patch in self.ax.patches[:]:
+            patch.remove()
+        
+        # Удаляем все дополнительные линии (кроме основных)
+        lines_to_remove = []
+        for line in self.ax.lines:
+            if line not in [self.line, self.point_markers]:
+                lines_to_remove.append(line)
+        for line in lines_to_remove:
+            line.remove()
+        
+        self.info_text.set_text('Точек: 0\nСтатус: Построение')
+        
+        self.fig.canvas.draw()
+    
+    def load_demo(self, event=None):
+        """Загрузка демонстрационного полигона"""
+        
+        self.clear()
+        
+        # Демонстрационный полигон
+        demo_points = [
+            (2, 2),
+            (5, 1),
+            (8, 2),
+            (9, 5),
+            (7, 7),
+            (4, 8),
+            (1, 6),
+            (1, 4)
+        ]
+        
+        for x, y in demo_points:
+            self.add_point(x, y)
+        
+        self.close_polygon()
+    
+    def triangulate(self, event=None):
+        """Триангуляция построенного полигона"""
+        
+        if not self.is_closed:
+            self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                                   f'Статус: Сначала замкните полигон!')
+            return
+        
+        if len(self.points) < 3:
+            self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                                   f'Статус: Недостаточно точек!')
+            return
+        
+        try:
+            # Очищаем предыдущую триангуляцию если была
+            for line in self.triangulation_lines:
+                line.remove()
+            self.triangulation_lines = []
+            
+            for patch in self.triangulation_patches:
+                patch.remove()
+            self.triangulation_patches = []
+            
+            # Создаём триангулятор
+            self.triangulator = IntrudingVertexTriangulation(self.points)
+            
+            # Выполняем триангуляцию
+            triangles = self.triangulator.triangulate()
+            
+            # Отображаем треугольники
+            for triangle in triangles:
+                tri_x = [v.x for v in triangle] + [triangle[0].x]
+                tri_y = [v.y for v in triangle] + [triangle[0].y]
+                
+                # Рисуем контур треугольника и сохраняем ссылку
+                line, = self.ax.plot(tri_x, tri_y, 'g-', linewidth=1, alpha=0.7)
+                self.triangulation_lines.append(line)
+                
+                # Заливаем треугольник случайным цветом и сохраняем ссылку
+                color = np.random.rand(3,)
+                patch = plt.Polygon([(v.x, v.y) for v in triangle], 
+                                   alpha=0.2, color=color)
+                self.ax.add_patch(patch)
+                self.triangulation_patches.append(patch)
+            
+            self.info_text.set_text(f'Точек: {len(self.points)}\n'
+                                   f'Треугольников: {len(triangles)}')
+            
+            self.fig.canvas.draw()
+            
+            # Показываем дополнительные визуализации
+            self.triangulator.visualize()
+            self.triangulator.visualize_steps()
+            
+        except Exception as e:
+            self.info_text.set_text(f'Ошибка триангуляции:\n{str(e)}')
+
+
 def demonstrate():
     """
     Демонстрация работы алгоритма триангуляции методом вторгающейся вершины.
@@ -508,45 +828,71 @@ def demonstrate():
     print("ТРИАНГУЛЯЦИЯ МЕТОДОМ ВТОРГАЮЩЕЙСЯ ВЕРШИНЫ")
     print("=" * 60)
     
-    # Определяем вершины тестового полигона
-    # Вершины должны быть упорядочены против часовой стрелки
-    polygon_points = [
-        (1, 1),     # вершина 0
-        (4, 0.5),   # вершина 1
-        (6, 2),     # вершина 2
-        (5, 4),     # вершина 3
-        (3, 3.5),   # вершина 4
-        (2, 5),     # вершина 5
-        (0, 3)      # вершина 6
-    ]
+    print("\nВыберите режим работы:")
+    print("1. Интерактивное построение полигона")
+    print("2. Демонстрация на готовом примере")
     
-    print("\nВершины полигона:")
-    for i, (x, y) in enumerate(polygon_points):
-        print(f"  Вершина {i}: ({x}, {y})")
+    choice = input("\nВаш выбор (1 или 2): ").strip()
     
-    # Создаём экземпляр триангулятора
-    triangulator = IntrudingVertexTriangulation(polygon_points)
-    
-    # Выполняем триангуляцию
-    triangles = triangulator.triangulate()
-    
-    # Выводим результаты
-    print(f"\nРезультат триангуляции:")
-    print(f"  Количество треугольников: {len(triangles)}")
-    print(f"  Ожидаемое количество: {len(polygon_points) - 2}")  # формула: n-2
-    
-    # Показываем, какие треугольники получились
-    for i, triangle in enumerate(triangles):
-        indices = [v.index for v in triangle]
-        print(f"  Треугольник {i}: вершины {indices}")
-    
-    # Визуализация результата
-    print("\nВизуализация результата...")
-    triangulator.visualize()
-    
-    # Пошаговая визуализация процесса
-    print("\nПошаговая визуализация...")
-    triangulator.visualize_steps()
+    if choice == "1":
+        print("\n" + "="*60)
+        print("ИНТЕРАКТИВНЫЙ РЕЖИМ")
+        print("="*60)
+        print("\nИнструкция:")
+        print("- Левый клик мыши - добавить точку")
+        print("- Правый клик мыши - замкнуть полигон")
+        print("- Кнопка 'Триангулировать' - выполнить триангуляцию")
+        print("- Кнопка 'Очистить' - начать заново")
+        print("- Кнопка 'Демо' - загрузить пример полигона")
+        print("\nЗапуск интерактивного режима...")
+        
+        builder = InteractivePolygonBuilder()
+        builder.start()
+        
+    else:
+        print("\n" + "="*60)
+        print("ДЕМОНСТРАЦИОННЫЙ РЕЖИМ")
+        print("="*60)
+        
+        # Определяем вершины тестового полигона
+        # Вершины должны быть упорядочены против часовой стрелки
+        polygon_points = [
+            (1, 1),     # вершина 0
+            (4, 0.5),   # вершина 1
+            (6, 2),     # вершина 2
+            (5, 4),     # вершина 3
+            (3, 3.5),   # вершина 4
+            (2, 5),     # вершина 5
+            (0, 3)      # вершина 6
+        ]
+        
+        print("\nВершины полигона:")
+        for i, (x, y) in enumerate(polygon_points):
+            print(f"  Вершина {i}: ({x}, {y})")
+        
+        # Создаём экземпляр триангулятора
+        triangulator = IntrudingVertexTriangulation(polygon_points)
+        
+        # Выполняем триангуляцию
+        triangles = triangulator.triangulate()
+        
+        # Выводим результаты
+        print(f"\nРезультат триангуляции:")
+        print(f"  Количество треугольников: {len(triangles)}")
+        print(f"  Ожидаемое количество: {len(polygon_points) - 2}")  # формула: n-2
+        
+        # Показываем, какие треугольники получились
+        for i, triangle in enumerate(triangles):
+            indices = [v.index for v in triangle]
+            print(f"  Треугольник {i}: вершины {indices}")
+        
+        # Визуализация результата
+        print("\nВизуализация результата...")
+        triangulator.visualize()
+        
+        # Пошаговая визуализация процесса
+        print("\nПошаговая визуализация...")
+        triangulator.visualize_steps()
 
 if __name__ == "__main__":
     demonstrate()
