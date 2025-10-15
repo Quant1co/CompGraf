@@ -18,14 +18,12 @@ class Point:
 class Polygon:
     """Класс для представления полигона как упорядоченного списка вершин"""
     def __init__(self, vertices: List[Point]):
-        self.vertices = vertices  # список вершин в порядке обхода полигона
-        # Присваиваем каждой вершине её порядковый номер в полигоне
+        self.vertices = vertices
         for i, v in enumerate(vertices):
             v.index = i
     
     def copy(self):
         """Создание глубокой копии полигона для сохранения промежуточных состояний"""
-        # Создаём новые объекты Point, чтобы изменения не затрагивали оригинал
         new_vertices = [Point(v.x, v.y, v.index) for v in self.vertices]
         return Polygon(new_vertices)
 
@@ -41,19 +39,14 @@ class IntrudingVertexTriangulation:
     """
     
     def __init__(self, polygon_points: List[Tuple[float, float]]):
-        # Преобразуем список координат в объекты Point с индексами
         vertices = [Point(x, y, i) for i, (x, y) in enumerate(polygon_points)]
-        self.original_polygon = Polygon(vertices)  # сохраняем исходный полигон
-        self.triangles = []  # список результирующих треугольников
-        self.steps = []      # история шагов для визуализации процесса
+        self.original_polygon = Polygon(vertices)
+        self.triangles = []
+        self.steps = []   
         
     def cross_product(self, o: Point, a: Point, b: Point) -> float:
         """
         Векторное произведение векторов OA и OB.
-        
-        Математика: (OA × OB)_z = (a.x - o.x)*(b.y - o.y) - (a.y - o.y)*(b.x - o.x)
-        
-        Результат:
         > 0: точка B слева от вектора OA (поворот против часовой стрелки)
         < 0: точка B справа от вектора OA (поворот по часовой стрелке)
         = 0: точки O, A, B коллинеарны
@@ -63,20 +56,16 @@ class IntrudingVertexTriangulation:
     def is_convex_vertex(self, polygon: Polygon, index: int) -> bool:
         """
         Проверка, является ли вершина выпуклой.
-        
         Вершина выпуклая, если при обходе полигона против часовой стрелки
         поворот в этой вершине происходит влево (против часовой стрелки).
-        
         Берём три последовательные вершины: prev -> curr -> next
         Если next слева от вектора (prev->curr), то curr - выпуклая
         """
         n = len(polygon.vertices)
-        # Получаем три последовательные вершины с учётом цикличности
-        prev = polygon.vertices[(index - 1) % n]  # предыдущая вершина
-        curr = polygon.vertices[index]            # текущая проверяемая вершина
-        next = polygon.vertices[(index + 1) % n]  # следующая вершина
-        
-        # Векторное произведение > 0 означает поворот влево (выпуклая вершина)
+        prev = polygon.vertices[(index - 1) % n]
+        curr = polygon.vertices[index]           
+        next = polygon.vertices[(index + 1) % n] 
+    
         return self.cross_product(prev, curr, next) > 0
     
     def point_in_triangle(self, p: Point, a: Point, b: Point, c: Point) -> bool:
@@ -94,9 +83,9 @@ class IntrudingVertexTriangulation:
             return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
         
         # Проверяем положение точки относительно каждой стороны треугольника
-        d1 = sign(p, a, b)  # относительно стороны AB
-        d2 = sign(p, b, c)  # относительно стороны BC
-        d3 = sign(p, c, a)  # относительно стороны CA
+        d1 = sign(p, a, b)
+        d2 = sign(p, b, c) 
+        d3 = sign(p, c, a) 
         
         # Проверяем, есть ли отрицательные и положительные значения
         has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
@@ -187,15 +176,14 @@ class IntrudingVertexTriangulation:
         # Проверяем все вершины полигона
         for i in range(n):
             if i == start_index:
-                continue  # пропускаем стартовую вершину
+                continue 
             
             # Проверяем, является ли вершина выпуклой
             if self.is_convex_vertex(polygon, i):
                 vertex = polygon.vertices[i]
-                # Вычисляем квадрат расстояния (не извлекаем корень для оптимизации)
+                # (не извлекаем корень для оптимизации)
                 dist = (vertex.x - start_vertex.x)**2 + (vertex.y - start_vertex.y)**2
                 
-                # Обновляем минимум, если нашли более близкую выпуклую вершину
                 if dist < min_dist:
                     min_dist = dist
                     closest_index = i
@@ -245,19 +233,6 @@ class IntrudingVertexTriangulation:
     def triangulate_recursive(self, polygon: Polygon):
         """
         Рекурсивная триангуляция полигона.
-        
-        Алгоритм:
-        1. Базовый случай: если полигон - треугольник, добавляем его в результат
-        2. Находим выпуклую вершину
-        3. Проверяем наличие вторгающихся вершин
-        4. Если нет вторгающихся:
-           - Отсекаем треугольник (i-1, i, i+1)
-           - Удаляем вершину i из полигона
-           - Рекурсивно обрабатываем оставшийся полигон
-        5. Если есть вторгающиеся:
-           - Проводим диагональ к самой удалённой вторгающейся вершине
-           - Разбиваем полигон на два
-           - Рекурсивно обрабатываем оба полигона
         """
         n = len(polygon.vertices)
         
