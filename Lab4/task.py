@@ -157,7 +157,6 @@ def classify_point_relative_to_edge(p1, p2, p):
     x, y = p
 
     cross = (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)
-
     
     if cross > 0:
         return 'слева'
