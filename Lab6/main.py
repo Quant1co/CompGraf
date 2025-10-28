@@ -129,9 +129,22 @@ class Polyhedron:
         self.name = name
         self.vertices = [Point3D(x, y, z) for x, y, z in vertices]
         self.faces = [Polygon(list(face)) for face in faces]
+        self.normalize_face_orientations()  # Нормализация ориентации граней
         self.edge_color = (200, 200, 255)
         self.bg_color = (10, 20, 40)
         self.show_faces = False  # Флаг для отображения заливки граней
+    
+    def normalize_face_orientations(self):
+        """
+        Нормализует ориентацию граней, чтобы все нормали были направлены наружу (dot > 0).
+        """
+        for face in self.faces:
+            normal = face.calculate_normal(self.vertices)
+            p = np.array([self.vertices[face.vertex_indices[0]].x, 
+                          self.vertices[face.vertex_indices[0]].y, 
+                          self.vertices[face.vertex_indices[0]].z])
+            if np.dot(normal, p) < 0:
+                face.vertex_indices.reverse()
     
     def apply_transform(self, matrix: np.ndarray):
         """
@@ -244,6 +257,20 @@ def rotation_z_matrix(angle):
         [0, 0, 1, 0],
         [0, 0, 0, 1]
     ])
+
+def reflection_matrix(plane: str):
+    """
+    Возвращает матрицу отражения относительно выбранной координатной плоскости.
+    :param plane: 'xy' (отражение по Z), 'xz' (по Y), 'yz' (по X)
+    """
+    if plane == 'xy':
+        return scale_matrix(1, 1, -1)
+    elif plane == 'xz':
+        return scale_matrix(1, -1, 1)
+    elif plane == 'yz':
+        return scale_matrix(-1, 1, 1)
+    else:
+        raise ValueError("Неверная плоскость для отражения")
 
 # --- Функции для создания многогранников ---
 
@@ -381,6 +408,14 @@ def main():
                     auto_rotate['y'] = not auto_rotate['y']
                 if event.key == pygame.K_z: 
                     auto_rotate['z'] = not auto_rotate['z']
+                
+                # Отражения (применяются один раз при нажатии)
+                if event.key == pygame.K_6:
+                    polyhedron.apply_transform(reflection_matrix('xy'))  # Отражение относительно XY
+                if event.key == pygame.K_7:
+                    polyhedron.apply_transform(reflection_matrix('xz'))  # Отражение относительно XZ
+                if event.key == pygame.K_8:
+                    polyhedron.apply_transform(reflection_matrix('yz'))  # Отражение относительно YZ
 
         keys = pygame.key.get_pressed()
         
@@ -394,11 +429,21 @@ def main():
         if keys[pygame.K_RIGHT]: 
             polyhedron.apply_transform(translation_matrix(move_speed, 0, 0))
         
-        # Масштаб
+        # Масштаб относительно центра
         if keys[pygame.K_EQUALS] or keys[pygame.K_PLUS]:
-            polyhedron.apply_transform(scale_matrix(scale_step, scale_step, scale_step))
+            center = polyhedron.get_center()
+            trans_to_origin = translation_matrix(-center.x, -center.y, -center.z)
+            scale_mat = scale_matrix(scale_step, scale_step, scale_step)
+            trans_back = translation_matrix(center.x, center.y, center.z)
+            combined = trans_back @ scale_mat @ trans_to_origin
+            polyhedron.apply_transform(combined)
         if keys[pygame.K_MINUS]:
-            polyhedron.apply_transform(scale_matrix(1/scale_step, 1/scale_step, 1/scale_step))
+            center = polyhedron.get_center()
+            trans_to_origin = translation_matrix(-center.x, -center.y, -center.z)
+            scale_mat = scale_matrix(1/scale_step, 1/scale_step, 1/scale_step)
+            trans_back = translation_matrix(center.x, center.y, center.z)
+            combined = trans_back @ scale_mat @ trans_to_origin
+            polyhedron.apply_transform(combined)
         
         # Поворот вручную
         if keys[pygame.K_d]:
@@ -434,9 +479,12 @@ def main():
             "1-5: Сменить фигуру",
             "Стрелки: Смещение",
             "W/S, A/D, Q/E: Поворот",
-            "+/-: Масштаб",
+            "+/-: Масштаб (относительно центра)",
             "R: Сброс",
             "X/Y/Z: Авто-вращение",
+            "6: Отражение относительно XY",
+            "7: Отражение относительно XZ",
+            "8: Отражение относительно YZ",
         ]
         
         for i, line in enumerate(info):
@@ -448,7 +496,7 @@ def main():
         if auto_rotate['y']: auto_status += "Y "
         if auto_rotate['z']: auto_status += "Z "
         if not any(auto_rotate.values()): auto_status += "Выкл"
-        draw_text(screen, auto_status, (10, 210), font, (100, 255, 100))
+        draw_text(screen, auto_status, (10, 10 + len(info) * 20), font, (100, 255, 100))
         
         pygame.display.flip()
         clock.tick(60)
