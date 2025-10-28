@@ -1,57 +1,195 @@
 import pygame
 import numpy as np
 import math
+from typing import List, Tuple
 
 # --- Классы ---
 
-# Класс точки не нужен отдельно, так как мы будем использовать векторы NumPy
-# Класс грани (многоугольника) не нужен отдельно, так как мы будем хранить индексы вершин
+class Point3D:
+    """
+    Класс для представления точки в 3D пространстве.
+    """
+    def __init__(self, x: float, y: float, z: float):
+        """
+        Инициализация точки в 3D пространстве.
+        :param x: координата X
+        :param y: координата Y
+        :param z: координата Z
+        """
+        self.x = x
+        self.y = y
+        self.z = z
+        # Храним точку как вектор в однородных координатах для матричных преобразований
+        self.homogeneous = np.array([x, y, z, 1], dtype=float)
+    
+    def apply_transform(self, matrix: np.ndarray):
+        """
+        Применяет матрицу преобразования к точке.
+        :param matrix: 4x4 матрица преобразования
+        """
+        self.homogeneous = self.homogeneous @ matrix.T
+        self.x, self.y, self.z = self.homogeneous[:3]
+    
+    def project(self, camera_distance: float, screen_width: int, screen_height: int) -> Tuple[int, int]:
+        """
+        Проецирует 3D точку на 2D экран.
+        :param camera_distance: расстояние до камеры
+        :param screen_width: ширина экрана
+        :param screen_height: высота экрана
+        :return: кортеж (x, y) с экранными координатами
+        """
+        # Простое перспективное проецирование
+        factor = camera_distance / (camera_distance + self.z)
+        screen_x = int(self.x * factor + screen_width / 2)
+        screen_y = int(self.y * factor + screen_height / 2)
+        return (screen_x, screen_y)
+    
+    def copy(self):
+        """Создает копию точки."""
+        return Point3D(self.x, self.y, self.z)
+    
+    def __repr__(self):
+        return f"Point3D({self.x:.2f}, {self.y:.2f}, {self.z:.2f})"
+
+
+class Polygon:
+    """
+    Класс для представления многоугольника (грани).
+    """
+    def __init__(self, vertex_indices: List[int], color: Tuple[int, int, int] = None):
+        """
+        Инициализация многоугольника.
+        :param vertex_indices: список индексов вершин, образующих грань
+        :param color: цвет грани (опционально)
+        """
+        self.vertex_indices = vertex_indices
+        self.color = color if color else (200, 200, 255)
+        self.fill_color = None  # Цвет заливки (если нужна заливка)
+    
+    def get_vertices(self, all_vertices: List[Point3D]) -> List[Point3D]:
+        """
+        Возвращает список вершин многоугольника.
+        :param all_vertices: список всех вершин многогранника
+        :return: список вершин данного многоугольника
+        """
+        return [all_vertices[i] for i in self.vertex_indices]
+    
+    def calculate_normal(self, vertices: List[Point3D]) -> np.ndarray:
+        """
+        Вычисляет нормаль к грани (для определения видимости).
+        :param vertices: список вершин многогранника
+        :return: вектор нормали
+        """
+        if len(self.vertex_indices) < 3:
+            return np.array([0, 0, 1])
+        
+        # Берем первые три вершины для вычисления нормали
+        p1 = vertices[self.vertex_indices[0]]
+        p2 = vertices[self.vertex_indices[1]]
+        p3 = vertices[self.vertex_indices[2]]
+        
+        # Векторы на грани
+        v1 = np.array([p2.x - p1.x, p2.y - p1.y, p2.z - p1.z])
+        v2 = np.array([p3.x - p1.x, p3.y - p1.y, p3.z - p1.z])
+        
+        # Векторное произведение дает нормаль
+        normal = np.cross(v1, v2)
+        return normal
+    
+    def draw(self, surface, projected_points: List[Tuple[int, int]], line_width: int = 2):
+        """
+        Отрисовка многоугольника на экране.
+        :param surface: поверхность pygame для рисования
+        :param projected_points: список спроецированных точек
+        :param line_width: толщина линии
+        """
+        points = [projected_points[i] for i in self.vertex_indices]
+        
+        if self.fill_color:
+            pygame.draw.polygon(surface, self.fill_color, points)
+        
+        pygame.draw.polygon(surface, self.color, points, line_width)
+    
+    def __repr__(self):
+        return f"Polygon(vertices={self.vertex_indices})"
+
 
 class Polyhedron:
     """
     Класс для представления многогранника.
-    Хранит вершины в виде NumPy векторов и грани в виде списков индексов вершин.
     """
-    def __init__(self, vertices, faces):
+    def __init__(self, vertices: List[Tuple[float, float, float]], 
+                 faces: List[Tuple[int, ...]], name: str = "Polyhedron"):
         """
         Инициализация многогранника.
-        :param vertices: Список кортежей (x, y, z) для каждой вершины.
-        :param faces: Список кортежей, где каждый кортеж содержит индексы вершин, образующих грань.
+        :param vertices: список кортежей (x, y, z) для каждой вершины
+        :param faces: список кортежей с индексами вершин для каждой грани
+        :param name: название многогранника
         """
-        # Преобразуем вершины в однородные координаты [x, y, z, 1] для матричных преобразований
-        self.vertices = np.array([list(v) + [1] for v in vertices], dtype=float)
-        self.faces = faces
-        self.color = (200, 200, 255)  # Цвет рёбер
-        self.bg_color = (10, 20, 40)   # Цвет фона
-
-    def apply_transform(self, matrix):
+        self.name = name
+        self.vertices = [Point3D(x, y, z) for x, y, z in vertices]
+        self.faces = [Polygon(list(face)) for face in faces]
+        self.edge_color = (200, 200, 255)
+        self.bg_color = (10, 20, 40)
+        self.show_faces = False  # Флаг для отображения заливки граней
+    
+    def apply_transform(self, matrix: np.ndarray):
         """
         Применяет матрицу преобразования ко всем вершинам многогранника.
+        :param matrix: 4x4 матрица преобразования
         """
-        # np.dot(matrix, self.vertices.T).T можно заменить на self.vertices @ matrix.T
-        self.vertices = self.vertices @ matrix.T
-
-    def draw(self, surface, camera_distance, screen_width, screen_height):
+        for vertex in self.vertices:
+            vertex.apply_transform(matrix)
+    
+    def get_center(self) -> Point3D:
         """
-        Проецирует 3D точки на 2D экран и отрисовывает рёбра многогранника.
+        Вычисляет центр многогранника.
+        :return: точка центра
         """
+        avg_x = sum(v.x for v in self.vertices) / len(self.vertices)
+        avg_y = sum(v.y for v in self.vertices) / len(self.vertices)
+        avg_z = sum(v.z for v in self.vertices) / len(self.vertices)
+        return Point3D(avg_x, avg_y, avg_z)
+    
+    def draw(self, surface, camera_distance: float, screen_width: int, screen_height: int):
+        """
+        Проецирует и отрисовывает многогранник.
+        :param surface: поверхность pygame для рисования
+        :param camera_distance: расстояние до камеры
+        :param screen_width: ширина экрана
+        :param screen_height: высота экрана
+        """
+        # Проецируем все вершины
         projected_points = []
         for vertex in self.vertices:
-            x, y, z, _ = vertex
-            
-            # Простое перспективное проецирование
-            # Чем дальше точка (больше z), тем меньше 'factor' и тем ближе к центру экрана она будет
-            factor = camera_distance / (camera_distance + z)
-            
-            screen_x = int(x * factor + screen_width / 2)
-            screen_y = int(y * factor + screen_height / 2)
-            
-            projected_points.append((screen_x, screen_y))
-            
-        # Отрисовка граней (многоугольников)
+            projected_points.append(vertex.project(camera_distance, screen_width, screen_height))
+        
+        # Сортируем грани по глубине (для правильного отображения)
+        # Используем среднюю Z-координату вершин грани
+        face_depths = []
         for face in self.faces:
-            points = [projected_points[i] for i in face]
-            pygame.draw.polygon(surface, self.color, points, 2) # 2 - толщина линии
+            avg_z = sum(self.vertices[i].z for i in face.vertex_indices) / len(face.vertex_indices)
+            face_depths.append((face, avg_z))
+        
+        # Сортируем от дальних к ближним
+        face_depths.sort(key=lambda x: x[1], reverse=True)
+        
+        # Отрисовываем грани
+        for face, _ in face_depths:
+            # Проверяем видимость грани (backface culling)
+            normal = face.calculate_normal(self.vertices)
+            if normal[2] < 0:  # Грань повернута к нам
+                face.draw(surface, projected_points)
+    
+    def get_info(self) -> str:
+        """
+        Возвращает информацию о многограннике.
+        :return: строка с информацией
+        """
+        return f"{self.name}: {len(self.vertices)} вершин, {len(self.faces)} граней"
+    
+    def __repr__(self):
+        return f"Polyhedron(name={self.name}, vertices={len(self.vertices)}, faces={len(self.faces)})"
 
 
 # --- Матрицы аффинных преобразований ---
@@ -110,13 +248,15 @@ def rotation_z_matrix(angle):
 # --- Функции для создания многогранников ---
 
 def create_tetrahedron(scale=100):
+    """Создает правильный тетраэдр."""
     vertices = np.array([
         (1, 1, 1), (1, -1, -1), (-1, 1, -1), (-1, -1, 1)
     ]) * scale / np.sqrt(3)
     faces = [(0, 1, 2), (0, 2, 3), (0, 3, 1), (1, 3, 2)]
-    return Polyhedron(vertices, faces)
+    return Polyhedron(vertices.tolist(), faces, "Тетраэдр")
 
-def create_hexahedron(scale=100): # Куб
+def create_hexahedron(scale=100):
+    """Создает куб."""
     s = scale
     vertices = [
         (-s, -s, -s), (s, -s, -s), (s, s, -s), (-s, s, -s),
@@ -126,9 +266,10 @@ def create_hexahedron(scale=100): # Куб
         (0, 1, 2, 3), (4, 5, 6, 7), (0, 3, 7, 4),
         (1, 2, 6, 5), (0, 1, 5, 4), (3, 2, 6, 7)
     ]
-    return Polyhedron(vertices, faces)
+    return Polyhedron(vertices, faces, "Гексаэдр (Куб)")
 
 def create_octahedron(scale=120):
+    """Создает правильный октаэдр."""
     s = scale
     vertices = [
         (s, 0, 0), (-s, 0, 0), (0, s, 0), (0, -s, 0), (0, 0, s), (0, 0, -s)
@@ -137,61 +278,49 @@ def create_octahedron(scale=120):
         (0, 2, 4), (0, 4, 3), (0, 3, 5), (0, 5, 2),
         (1, 2, 5), (1, 5, 3), (1, 3, 4), (1, 4, 2)
     ]
-    return Polyhedron(vertices, faces)
-    
+    return Polyhedron(vertices, faces, "Октаэдр")
+
 def create_icosahedron(scale=120):
-    phi = (1 + math.sqrt(5)) / 2 # Золотое сечение
+    """Создает правильный икосаэдр."""
+    phi = (1 + math.sqrt(5)) / 2
     s = scale
     vertices = [
         (-1, phi, 0), (1, phi, 0), (-1, -phi, 0), (1, -phi, 0),
         (0, -1, phi), (0, 1, phi), (0, -1, -phi), (0, 1, -phi),
         (phi, 0, -1), (phi, 0, 1), (-phi, 0, -1), (-phi, 0, 1)
     ]
-    vertices = np.array(vertices) * s / phi
+    vertices = (np.array(vertices) * s / phi).tolist()
     faces = [
         (0, 11, 5), (0, 5, 1), (0, 1, 7), (0, 7, 10), (0, 10, 11),
         (1, 5, 9), (5, 11, 4), (11, 10, 2), (10, 7, 6), (7, 1, 8),
         (3, 9, 4), (3, 4, 2), (3, 2, 6), (3, 6, 8), (3, 8, 9),
         (4, 9, 5), (2, 4, 11), (6, 2, 10), (8, 6, 7), (9, 8, 1)
     ]
-    return Polyhedron(vertices, faces)
+    return Polyhedron(vertices, faces, "Икосаэдр")
 
 def create_dodecahedron(scale=80):
-    """Создает правильный додекаэдр (12 пятиугольных граней, 20 вершин)."""
-    phi = (1 + math.sqrt(5)) / 2  # Золотое сечение
+    """Создает правильный додекаэдр."""
+    phi = (1 + math.sqrt(5)) / 2
     s = scale
     
-    # 20 вершин додекаэдра
     vertices = [
-        # 8 вершин куба со сторонами 2
-        ( 1,  1,  1), ( 1,  1, -1), ( 1, -1,  1), ( 1, -1, -1),
-        (-1,  1,  1), (-1,  1, -1), (-1, -1,  1), (-1, -1, -1),
-        # 12 вершин на прямоугольных гранях
-        (0,  1/phi,  phi), (0,  1/phi, -phi), (0, -1/phi,  phi), (0, -1/phi, -phi),
-        ( 1/phi,  phi, 0), ( 1/phi, -phi, 0), (-1/phi,  phi, 0), (-1/phi, -phi, 0),
-        ( phi, 0,  1/phi), ( phi, 0, -1/phi), (-phi, 0,  1/phi), (-phi, 0, -1/phi)
+        (1, 1, 1), (1, 1, -1), (1, -1, 1), (1, -1, -1),
+        (-1, 1, 1), (-1, 1, -1), (-1, -1, 1), (-1, -1, -1),
+        (0, 1/phi, phi), (0, 1/phi, -phi), (0, -1/phi, phi), (0, -1/phi, -phi),
+        (1/phi, phi, 0), (1/phi, -phi, 0), (-1/phi, phi, 0), (-1/phi, -phi, 0),
+        (phi, 0, 1/phi), (phi, 0, -1/phi), (-phi, 0, 1/phi), (-phi, 0, -1/phi)
     ]
     
-    # Масштабируем вершины
-    vertices = np.array([(v[0]*s, v[1]*s, v[2]*s) for v in vertices])
+    vertices = [(v[0]*s, v[1]*s, v[2]*s) for v in vertices]
     
-    # 12 пятиугольных граней додекаэдра
     faces = [
-        (0, 16, 2, 10, 8),    # Грань 0
-        (0, 8, 4, 14, 12),    # Грань 1
-        (0, 12, 1, 17, 16),   # Грань 2
-        (1, 9, 5, 14, 12),    # Грань 3
-        (1, 17, 3, 11, 9),    # Грань 4
-        (2, 16, 17, 3, 13),   # Грань 5
-        (2, 13, 15, 6, 10),   # Грань 6
-        (3, 11, 7, 15, 13),   # Грань 7
-        (4, 8, 10, 6, 18),    # Грань 8
-        (4, 18, 19, 5, 14),   # Грань 9
-        (5, 19, 7, 11, 9),    # Грань 10
-        (6, 15, 7, 19, 18)    # Грань 11
+        (0, 16, 2, 10, 8), (0, 8, 4, 14, 12), (0, 12, 1, 17, 16),
+        (1, 9, 5, 14, 12), (1, 17, 3, 11, 9), (2, 16, 17, 3, 13),
+        (2, 13, 15, 6, 10), (3, 11, 7, 15, 13), (4, 8, 10, 6, 18),
+        (4, 18, 19, 5, 14), (5, 19, 7, 11, 9), (6, 15, 7, 19, 18)
     ]
     
-    return Polyhedron(vertices, faces)
+    return Polyhedron(vertices, faces, "Додекаэдр")
 
 # --- Основная часть программы ---
 
@@ -205,7 +334,7 @@ def main():
     
     screen_width, screen_height = 1000, 800
     screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("3D Polyhedron Viewer")
+    pygame.display.set_caption("3D Polyhedron Viewer - OOP Version")
     
     clock = pygame.time.Clock()
     font = pygame.font.SysFont('Consolas', 16)
@@ -216,22 +345,22 @@ def main():
     move_speed = 10.0
     scale_step = 1.05
     
-    # Создаем первый многогранник
+    # Создаем многогранники
     polyhedrons = {
-        '1': ('Тетраэдр', create_tetrahedron),
-        '2': ('Гексаэдр (куб)', create_hexahedron),
-        '3': ('Октаэдр', create_octahedron),
-        '4': ('Икосаэдр', create_icosahedron),
-        '5': ('Додекаэдр', create_dodecahedron),
+        '1': create_tetrahedron,
+        '2': create_hexahedron,
+        '3': create_octahedron,
+        '4': create_icosahedron,
+        '5': create_dodecahedron,
     }
+    
     current_poly_key = '2'
-    polyhedron = polyhedrons[current_poly_key][1]()
+    polyhedron = polyhedrons[current_poly_key]()
     
     auto_rotate = {'x': False, 'y': True, 'z': False}
     
     running = True
     while running:
-        # Обработка событий
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -239,18 +368,20 @@ def main():
                 # Смена фигур
                 if '1' <= event.unicode <= '5':
                     current_poly_key = event.unicode
-                    polyhedron = polyhedrons[current_poly_key][1]()
+                    polyhedron = polyhedrons[current_poly_key]()
+                
                 # Сброс
                 if event.key == pygame.K_r:
-                    polyhedron = polyhedrons[current_poly_key][1]()
+                    polyhedron = polyhedrons[current_poly_key]()
                 
-                # Включение/выключение авто-вращения
-                if event.key == pygame.K_x: auto_rotate['x'] = not auto_rotate['x']
-                if event.key == pygame.K_y: auto_rotate['y'] = not auto_rotate['y']
-                if event.key == pygame.K_z: auto_rotate['z'] = not auto_rotate['z']
+                # Авто-вращение
+                if event.key == pygame.K_x: 
+                    auto_rotate['x'] = not auto_rotate['x']
+                if event.key == pygame.K_y: 
+                    auto_rotate['y'] = not auto_rotate['y']
+                if event.key == pygame.K_z: 
+                    auto_rotate['z'] = not auto_rotate['z']
 
-
-        # Обработка зажатых клавиш для преобразований
         keys = pygame.key.get_pressed()
         
         # Смещение
@@ -264,12 +395,12 @@ def main():
             polyhedron.apply_transform(translation_matrix(move_speed, 0, 0))
         
         # Масштаб
-        if keys[pygame.K_EQUALS] or keys[pygame.K_PLUS]: # Знак + (часто на той же клавише, что и =)
+        if keys[pygame.K_EQUALS] or keys[pygame.K_PLUS]:
             polyhedron.apply_transform(scale_matrix(scale_step, scale_step, scale_step))
         if keys[pygame.K_MINUS]:
             polyhedron.apply_transform(scale_matrix(1/scale_step, 1/scale_step, 1/scale_step))
-            
-        # Поворот вручную (клавиши A, D, W, S, Q, E)
+        
+        # Поворот вручную
         if keys[pygame.K_d]:
             polyhedron.apply_transform(rotation_y_matrix(rotation_speed))
         if keys[pygame.K_a]:
@@ -284,38 +415,45 @@ def main():
             polyhedron.apply_transform(rotation_z_matrix(-rotation_speed))
 
         # Авто-вращение
-        if auto_rotate['x']: polyhedron.apply_transform(rotation_x_matrix(rotation_speed / 2))
-        if auto_rotate['y']: polyhedron.apply_transform(rotation_y_matrix(rotation_speed / 2))
-        if auto_rotate['z']: polyhedron.apply_transform(rotation_z_matrix(rotation_speed / 2))
+        if auto_rotate['x']: 
+            polyhedron.apply_transform(rotation_x_matrix(rotation_speed / 2))
+        if auto_rotate['y']: 
+            polyhedron.apply_transform(rotation_y_matrix(rotation_speed / 2))
+        if auto_rotate['z']: 
+            polyhedron.apply_transform(rotation_z_matrix(rotation_speed / 2))
 
         # Отрисовка
         screen.fill(polyhedron.bg_color)
         polyhedron.draw(screen, camera_distance, screen_width, screen_height)
         
-        # Отрисовка интерфейса
+        # Интерфейс
         info = [
-            f"Текущая фигура: {polyhedrons[current_poly_key][0]}",
+            polyhedron.get_info(),
             " ",
             "Управление:",
-            "Клавиши 1-5: Сменить фигуру",
-            "Стрелки: Смещение (Translate)",
-            "W/S: Поворот по X",
-            "A/D: Поворот по Y",
-            "Q/E: Поворот по Z",
-            "+/-: Масштаб (Scale)",
-            "R: Сброс положения фигуры",
-            "X/Y/Z: Вкл/выкл авто-вращение",
+            "1-5: Сменить фигуру",
+            "Стрелки: Смещение",
+            "W/S, A/D, Q/E: Поворот",
+            "+/-: Масштаб",
+            "R: Сброс",
+            "X/Y/Z: Авто-вращение",
         ]
         
         for i, line in enumerate(info):
             draw_text(screen, line, (10, 10 + i * 20), font)
         
+        # Показываем состояние авто-вращения
+        auto_status = "Авто: "
+        if auto_rotate['x']: auto_status += "X "
+        if auto_rotate['y']: auto_status += "Y "
+        if auto_rotate['z']: auto_status += "Z "
+        if not any(auto_rotate.values()): auto_status += "Выкл"
+        draw_text(screen, auto_status, (10, 210), font, (100, 255, 100))
+        
         pygame.display.flip()
-        
-        clock.tick(60) # 60 FPS
-        
+        clock.tick(60)
+    
     pygame.quit()
-
 
 if __name__ == '__main__':
     main()
