@@ -30,33 +30,23 @@ class Point3D:
         self.homogeneous = self.homogeneous @ matrix.T
         self.x, self.y, self.z = self.homogeneous[:3]
     
-    def project(self, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective') -> Tuple[int, int]:
+    def project_perspective(self, camera_distance: float, screen_width: int, screen_height: int) -> Tuple[int, int]:
         """
-        Проецирует 3D точку на 2D экран.
-        Поддерживает две проекции: 'perspective' и 'axonometric'.
-        :param camera_distance: расстояние до камеры
-        :param screen_width: ширина экрана
-        :param screen_height: высота экрана
-        :param projection_mode: 'perspective' или 'axonometric'
-        :return: кортеж (x, y) с экранными координатами
+        Перспективная проекция.
         """
-        if projection_mode == 'perspective':
-            # Простое перспективное проецирование (сохранено поведение оригинала)
-            factor = camera_distance / (camera_distance + self.z)
-            screen_x = int(self.x * factor + screen_width / 2)
-            screen_y = int(self.y * factor + screen_height / 2)
-            return (screen_x, screen_y)
-        elif projection_mode == 'axonometric':
-            # Аксонометрическая (ортографическая) проекция — используем изометрическую композицию
-            # Не меняем реальную точку: применяем вспомогательную view-матрицу
-            view = axonometric_view_matrix()  # 4x4
-            v = np.array([self.x, self.y, self.z, 1.0]) @ view.T
-            # Ортографическое проецирование: просто отброс Z
-            screen_x = int(v[0] + screen_width / 2)
-            screen_y = int(v[1] + screen_height / 2)
-            return (screen_x, screen_y)
-        else:
-            raise ValueError("Неверный режим проекции")
+        factor = camera_distance / (camera_distance + self.z)
+        screen_x = int(self.x * factor + screen_width / 2)
+        screen_y = int(self.y * factor + screen_height / 2)
+        return (screen_x, screen_y)
+    
+    def project_axonometric(self, view_matrix: np.ndarray, screen_width: int, screen_height: int) -> Tuple[int, int]:
+        """
+        Аксонометрическая проекция.
+        """
+        v = self.homogeneous @ view_matrix.T
+        screen_x = int(v[0] + screen_width / 2)
+        screen_y = int(v[1] + screen_height / 2)
+        return (screen_x, screen_y)
     
     def copy(self):
         """Создает копию точки."""
@@ -187,25 +177,39 @@ class Polyhedron:
         :param screen_height: высота экрана
         :param projection_mode: режим проекции: 'perspective' или 'axonometric'
         """
-        # Проецируем все вершины
-        projected_points = []
-        for vertex in self.vertices:
-            projected_points.append(vertex.project(camera_distance, screen_width, screen_height, projection_mode))
+        if projection_mode == 'axonometric':
+            view = axonometric_view_matrix()
+            # Вычисляем viewed вершины
+            viewed_vertices = []
+            for vertex in self.vertices:
+                v_hom = np.array([vertex.x, vertex.y, vertex.z, 1.0])
+                viewed_hom = v_hom @ view.T
+                viewed_vertices.append(Point3D(viewed_hom[0], viewed_hom[1], viewed_hom[2]))
+        else:
+            viewed_vertices = self.vertices
         
-        # Сортируем грани по глубине (для правильного отображения)
-        # Используем среднюю Z-координату вершин грани
+        # Проецируем вершины
+        projected_points = []
+        if projection_mode == 'perspective':
+            for vertex in self.vertices:
+                projected_points.append(vertex.project_perspective(camera_distance, screen_width, screen_height))
+        else:  # axonometric
+            for viewed_vertex in viewed_vertices:
+                projected_points.append((int(viewed_vertex.x + screen_width / 2), int(viewed_vertex.y + screen_height / 2)))
+        
+        # Сортируем грани по глубине
         face_depths = []
         for face in self.faces:
-            avg_z = sum(self.vertices[i].z for i in face.vertex_indices) / len(face.vertex_indices)
+            avg_z = sum(viewed_vertices[i].z for i in face.vertex_indices) / len(face.vertex_indices)
             face_depths.append((face, avg_z))
         
-        # Сортируем от дальних к ближним
+        # Сортируем от дальних к ближним (assuming z increases into the screen)
         face_depths.sort(key=lambda x: x[1], reverse=True)
         
         # Отрисовываем грани
         for face, _ in face_depths:
-            # Проверяем видимость грани (backface culling)
-            normal = face.calculate_normal(self.vertices)
+            # Backface culling
+            normal = face.calculate_normal(viewed_vertices)
             if normal[2] < 0:  # Грань повернута к нам
                 face.draw(surface, projected_points)
     
