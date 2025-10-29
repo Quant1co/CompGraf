@@ -30,19 +30,33 @@ class Point3D:
         self.homogeneous = self.homogeneous @ matrix.T
         self.x, self.y, self.z = self.homogeneous[:3]
     
-    def project(self, camera_distance: float, screen_width: int, screen_height: int) -> Tuple[int, int]:
+    def project(self, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective') -> Tuple[int, int]:
         """
         Проецирует 3D точку на 2D экран.
+        Поддерживает две проекции: 'perspective' и 'axonometric'.
         :param camera_distance: расстояние до камеры
         :param screen_width: ширина экрана
         :param screen_height: высота экрана
+        :param projection_mode: 'perspective' или 'axonometric'
         :return: кортеж (x, y) с экранными координатами
         """
-        # Простое перспективное проецирование
-        factor = camera_distance / (camera_distance + self.z)
-        screen_x = int(self.x * factor + screen_width / 2)
-        screen_y = int(self.y * factor + screen_height / 2)
-        return (screen_x, screen_y)
+        if projection_mode == 'perspective':
+            # Простое перспективное проецирование (сохранено поведение оригинала)
+            factor = camera_distance / (camera_distance + self.z)
+            screen_x = int(self.x * factor + screen_width / 2)
+            screen_y = int(self.y * factor + screen_height / 2)
+            return (screen_x, screen_y)
+        elif projection_mode == 'axonometric':
+            # Аксонометрическая (ортографическая) проекция — используем изометрическую композицию
+            # Не меняем реальную точку: применяем вспомогательную view-матрицу
+            view = axonometric_view_matrix()  # 4x4
+            v = np.array([self.x, self.y, self.z, 1.0]) @ view.T
+            # Ортографическое проецирование: просто отброс Z
+            screen_x = int(v[0] + screen_width / 2)
+            screen_y = int(v[1] + screen_height / 2)
+            return (screen_x, screen_y)
+        else:
+            raise ValueError("Неверный режим проекции")
     
     def copy(self):
         """Создает копию точки."""
@@ -164,18 +178,19 @@ class Polyhedron:
         avg_z = sum(v.z for v in self.vertices) / len(self.vertices)
         return Point3D(avg_x, avg_y, avg_z)
     
-    def draw(self, surface, camera_distance: float, screen_width: int, screen_height: int):
+    def draw(self, surface, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective'):
         """
         Проецирует и отрисовывает многогранник.
         :param surface: поверхность pygame для рисования
         :param camera_distance: расстояние до камеры
         :param screen_width: ширина экрана
         :param screen_height: высота экрана
+        :param projection_mode: режим проекции: 'perspective' или 'axonometric'
         """
         # Проецируем все вершины
         projected_points = []
         for vertex in self.vertices:
-            projected_points.append(vertex.project(camera_distance, screen_width, screen_height))
+            projected_points.append(vertex.project(camera_distance, screen_width, screen_height, projection_mode))
         
         # Сортируем грани по глубине (для правильного отображения)
         # Используем среднюю Z-координату вершин грани
@@ -226,7 +241,7 @@ def scale_matrix(sx, sy, sz):
     ])
 
 def rotation_x_matrix(angle):
-    """Возвращает матрицу поворота вокруг оси X."""
+    """Возвращает матрицу поворота вокруг оси X (угол в градусах)."""
     rad = math.radians(angle)
     c, s = math.cos(rad), math.sin(rad)
     return np.array([
@@ -237,7 +252,7 @@ def rotation_x_matrix(angle):
     ])
 
 def rotation_y_matrix(angle):
-    """Возвращает матрицу поворота вокруг оси Y."""
+    """Возвращает матрицу поворота вокруг оси Y (угол в градусах)."""
     rad = math.radians(angle)
     c, s = math.cos(rad), math.sin(rad)
     return np.array([
@@ -248,7 +263,7 @@ def rotation_y_matrix(angle):
     ])
 
 def rotation_z_matrix(angle):
-    """Возвращает матрицу поворота вокруг оси Z."""
+    """Возвращает матрицу поворота вокруг оси Z (угол в градусах)."""
     rad = math.radians(angle)
     c, s = math.cos(rad), math.sin(rad)
     return np.array([
@@ -271,6 +286,69 @@ def reflection_matrix(plane: str):
         return scale_matrix(-1, 1, 1)
     else:
         raise ValueError("Неверная плоскость для отражения")
+
+# --- Новые матрицы: поворот вокруг произвольной прямой ---
+
+def rodrigues_rotation_matrix(u: np.ndarray, angle_rad: float) -> np.ndarray:
+    """Возвращает 3x3 матрицу поворота по формуле Родригеса для единичного вектора u."""
+    ux, uy, uz = u
+    c = math.cos(angle_rad)
+    s = math.sin(angle_rad)
+    I = np.eye(3)
+    uu = np.outer(u, u)
+    u_x = np.array([[0, -uz, uy], [uz, 0, -ux], [-uy, ux, 0]])
+    R = c * I + (1 - c) * uu + s * u_x
+    return R
+
+
+def rotation_about_line(p1: Tuple[float, float, float], p2: Tuple[float, float, float], angle_deg: float) -> np.ndarray:
+    """
+    Возвращает 4x4 матрицу поворота вокруг прямой, проходящей через p1 и p2, на угол angle_deg (в градусах).
+    Алгоритм: перенести p1 в начало координат, применить поворот по Родригесу вокруг единичного направления u, вернуть обратно.
+    """
+    p1 = np.array(p1, dtype=float)
+    p2 = np.array(p2, dtype=float)
+    u = p2 - p1
+    norm = np.linalg.norm(u)
+    if norm == 0:
+        raise ValueError("Две точки совпадают — направление неопределено")
+    u = u / norm
+    angle_rad = math.radians(angle_deg)
+    R3 = rodrigues_rotation_matrix(u, angle_rad)
+    # Собираем однородную матрицу
+    R = np.eye(4)
+    R[:3, :3] = R3
+    T1 = translation_matrix(-p1[0], -p1[1], -p1[2])
+    T2 = translation_matrix(p1[0], p1[1], p1[2])
+    return T2 @ R @ T1
+
+
+def rotation_axis_through_center_matrix(center: Point3D, axis: str, angle_deg: float) -> np.ndarray:
+    """
+    Возвращает 4x4 матрицу поворота вокруг прямой, проходящей через центр и параллельной оси axis ('x','y','z').
+    """
+    if axis == 'x':
+        R = rotation_x_matrix(angle_deg)
+    elif axis == 'y':
+        R = rotation_y_matrix(angle_deg)
+    elif axis == 'z':
+        R = rotation_z_matrix(angle_deg)
+    else:
+        raise ValueError("Неверная ось")
+    trans_to_origin = translation_matrix(-center.x, -center.y, -center.z)
+    trans_back = translation_matrix(center.x, center.y, center.z)
+    return trans_back @ R @ trans_to_origin
+
+# --- Аксонометрическая view-матрица ---
+
+def axonometric_view_matrix():
+    """
+    Возвращает 4x4 матрицу, задающую стандартную изометрическую аксонометрию.
+    Комбинация: поворот вокруг X на 35.264° и вокруг Y на 45° (в таком порядке).
+    """
+    Rx = rotation_x_matrix(35.26438968)  # ~arctan(sqrt(1/2)) в градусах
+    Ry = rotation_y_matrix(45)
+    return Ry @ Rx
 
 # --- Функции для создания многогранников ---
 
@@ -361,7 +439,7 @@ def main():
     
     screen_width, screen_height = 1000, 800
     screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("3D Polyhedron Viewer - OOP Version")
+    pygame.display.set_caption("3D Polyhedron Viewer - Extended")
     
     clock = pygame.time.Clock()
     font = pygame.font.SysFont('Consolas', 16)
@@ -371,6 +449,11 @@ def main():
     rotation_speed = 1.0
     move_speed = 10.0
     scale_step = 1.05
+    
+    # Параметры для поворота вокруг произвольной прямой (можно менять в коде)
+    arbitrary_p1 = (0.0, 0.0, 0.0)
+    arbitrary_p2 = (100.0, 100.0, 0.0)
+    arbitrary_angle_step = 15.0  # градусов за одно нажатие клавиши 'k'
     
     # Создаем многогранники
     polyhedrons = {
@@ -385,6 +468,7 @@ def main():
     polyhedron = polyhedrons[current_poly_key]()
     
     auto_rotate = {'x': False, 'y': True, 'z': False}
+    projection_mode = 'perspective'  # 'perspective' или 'axonometric'
     
     running = True
     while running:
@@ -416,6 +500,29 @@ def main():
                     polyhedron.apply_transform(reflection_matrix('xz'))  # Отражение относительно XZ
                 if event.key == pygame.K_8:
                     polyhedron.apply_transform(reflection_matrix('yz'))  # Отражение относительно YZ
+
+                # Переключение проекций
+                if event.key == pygame.K_p:
+                    projection_mode = 'axonometric' if projection_mode == 'perspective' else 'perspective'
+
+                # Поворот вокруг произвольной прямой (по умолчанию — arbitrary_p1->arbitrary_p2)
+                if event.key == pygame.K_k:
+                    M = rotation_about_line(arbitrary_p1, arbitrary_p2, arbitrary_angle_step)
+                    polyhedron.apply_transform(M)
+
+                # Повороты вокруг прямой, проходящей через центр, параллельно выбранной оси
+                if event.key == pygame.K_u:  # вокруг оси X через центр
+                    center = polyhedron.get_center()
+                    M = rotation_axis_through_center_matrix(center, 'x', 10)
+                    polyhedron.apply_transform(M)
+                if event.key == pygame.K_i:  # вокруг оси Y через центр
+                    center = polyhedron.get_center()
+                    M = rotation_axis_through_center_matrix(center, 'y', 10)
+                    polyhedron.apply_transform(M)
+                if event.key == pygame.K_o:  # вокруг оси Z через центр
+                    center = polyhedron.get_center()
+                    M = rotation_axis_through_center_matrix(center, 'z', 10)
+                    polyhedron.apply_transform(M)
 
         keys = pygame.key.get_pressed()
         
@@ -469,12 +576,13 @@ def main():
 
         # Отрисовка
         screen.fill(polyhedron.bg_color)
-        polyhedron.draw(screen, camera_distance, screen_width, screen_height)
+        polyhedron.draw(screen, camera_distance, screen_width, screen_height, projection_mode)
         
         # Интерфейс
         info = [
             polyhedron.get_info(),
-            " ",
+            f"Проекция: {projection_mode}",
+            "",
             "Управление:",
             "1-5: Сменить фигуру",
             "Стрелки: Смещение",
@@ -482,9 +590,11 @@ def main():
             "+/-: Масштаб (относительно центра)",
             "R: Сброс",
             "X/Y/Z: Авто-вращение",
-            "6: Отражение относительно XY",
-            "7: Отражение относительно XZ",
-            "8: Отражение относительно YZ",
+            "6/7/8: Отражения относительно XY/XZ/YZ",
+            "P: Переключить перспективу/аксонометрию",
+            "U/I/O: Поворот вокруг прямой через центр (X/Y/Z) на 10°",
+            "K: Поворот вокруг произвольной прямой (по умолчанию задается в коде)",
+            f"Arb line p1={arbitrary_p1} p2={arbitrary_p2} step={arbitrary_angle_step}° (нажмите K)",
         ]
         
         for i, line in enumerate(info):
