@@ -488,6 +488,44 @@ def create_dodecahedron(scale=80):
     
     return Polyhedron(vertices, faces, "Додекаэдр")
 
+def create_surface_of_revolution(generatrix: List[Tuple[float, float, float]], axis: str, divisions: int, name="Фигура вращения"):
+    """
+    Создает фигуру вращения на основе образующей.
+    generatrix: список точек (x,y,z)
+    axis: 'x', 'y' или 'z' — ось вращения
+    divisions: количество разбиений (например 36)
+    """
+    angle_step = 360.0 / divisions
+
+    vertices = []
+    for k in range(divisions):
+        angle = math.radians(k * angle_step)
+        if axis == 'x':
+            R = rotation_x_matrix(math.degrees(angle))
+        elif axis == 'y':
+            R = rotation_y_matrix(math.degrees(angle))
+        elif axis == 'z':
+            R = rotation_z_matrix(math.degrees(angle))
+        else:
+            raise ValueError("Ось должна быть 'x', 'y' или 'z'.")
+
+        for (x, y, z) in generatrix:
+            v = np.array([x, y, z, 1.0]) @ R.T
+            vertices.append((v[0], v[1], v[2]))
+
+    faces = []
+    gcount = len(generatrix)
+    for k in range(divisions):
+        for i in range(gcount - 1):
+            a = k * gcount + i
+            b = ((k+1) % divisions) * gcount + i
+            c = ((k+1) % divisions) * gcount + (i+1)
+            d = k * gcount + (i+1)
+            faces.append((a, b, c, d))
+
+    return Polyhedron(vertices, faces, name)
+
+
 # --- Основная часть программы ---
 
 def draw_text(surface, text, pos, font, color=(255, 255, 255)):
@@ -523,6 +561,12 @@ def main():
         '3': create_octahedron,
         '4': create_icosahedron,
         '5': create_dodecahedron,
+        '6': lambda: create_surface_of_revolution(
+        generatrix=[(0, -100, 0), (40, -80, 0), (60, -20, 0), (40, 60, 0), (0, 100, 0)],
+        axis='z',
+        divisions=48,
+        name="Фигура вращения"
+    )
     }
     
     current_poly_key = '2'
@@ -541,7 +585,7 @@ def main():
                 running = False
             if event.type == pygame.KEYDOWN:
                 # Смена фигур
-                if '1' <= event.unicode <= '5':
+                if '1' <= event.unicode <= '6':
                     current_poly_key = event.unicode
                     polyhedron = polyhedrons[current_poly_key]()
                 
@@ -664,6 +708,7 @@ def main():
             "",
             "Управление:",
             "1-5: Сменить фигуру",
+            "6: Построение фигуры вращения",
             "Стрелки: Смещение",
             "W/S, A/D, Q/E: Поворот",
             "+/-: Масштаб (относительно центра)",
