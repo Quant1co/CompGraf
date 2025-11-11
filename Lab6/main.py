@@ -140,24 +140,15 @@ class Polyhedron:
     
     def normalize_face_orientations(self):
         """
-        Нормализует ориентацию граней, чтобы все нормали были направлены наружу.
+        Нормализует ориентацию граней, чтобы все нормали были направлены наружу (dot > 0).
         """
-        center = self.get_center()
-        center_vec = np.array([center.x, center.y, center.z])
-        
         for face in self.faces:
             normal = face.calculate_normal(self.vertices)
-            if np.linalg.norm(normal) == 0:
-                continue  # Пропустить вырожденные грани
-            
             p = np.array([self.vertices[face.vertex_indices[0]].x, 
                           self.vertices[face.vertex_indices[0]].y, 
                           self.vertices[face.vertex_indices[0]].z])
-            vector_to_p = p - center_vec
-            if np.dot(normal, vector_to_p) < 0:
+            if np.dot(normal, p) < 0:
                 face.vertex_indices.reverse()
-                # Пересчитать нормаль после реверса
-                normal = face.calculate_normal(self.vertices)
     
     def apply_transform(self, matrix: np.ndarray):
         """
@@ -172,8 +163,6 @@ class Polyhedron:
         Вычисляет центр многогранника.
         :return: точка центра
         """
-        if not self.vertices:
-            return Point3D(0, 0, 0)
         avg_x = sum(v.x for v in self.vertices) / len(self.vertices)
         avg_y = sum(v.y for v in self.vertices) / len(self.vertices)
         avg_z = sum(v.z for v in self.vertices) / len(self.vertices)
@@ -230,52 +219,6 @@ class Polyhedron:
         :return: строка с информацией
         """
         return f"{self.name}: {len(self.vertices)} вершин, {len(self.faces)} граней"
-    
-    def to_obj(self, filename: str):
-        """
-        Сохраняет модель многогранника в формате Wavefront OBJ.
-        :param filename: имя файла для сохранения
-        """
-        with open(filename, 'w') as f:
-            # Записываем вершины
-            for vertex in self.vertices:
-                f.write(f"v {vertex.x:.6f} {vertex.y:.6f} {vertex.z:.6f}\n")
-            # Записываем грани (индексы начинаются с 1)
-            for face in self.faces:
-                indices = " ".join(str(idx + 1) for idx in face.vertex_indices)
-                f.write(f"f {indices}\n")
-    
-    @classmethod
-    def from_obj(cls, filename: str, name: str = "Loaded Model"):
-        """
-        Загружает модель многогранника из файла в формате Wavefront OBJ.
-        :param filename: имя файла для загрузки
-        :param name: название загруженной модели
-        :return: экземпляр Polyhedron
-        """
-        vertices = []
-        faces = []
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith('v '):
-                    parts = line.split()[1:]
-                    if len(parts) == 3:
-                        vertices.append((float(parts[0]), float(parts[1]), float(parts[2])))
-                elif line.startswith('f '):
-                    parts = line.split()[1:]
-                    face_indices = []
-                    for part in parts:
-                        # Берем только индекс вершины (игнорируем / для текстур/нормалей)
-                        idx = int(part.split('/')[0]) - 1
-                        face_indices.append(idx)
-                    faces.append(tuple(face_indices))
-        instance = cls(vertices, faces, name)
-        # Центрируем модель после загрузки
-        center = instance.get_center()
-        trans_matrix = translation_matrix(-center.x, -center.y, -center.z)
-        instance.apply_transform(trans_matrix)
-        return instance
     
     def __repr__(self):
         return f"Polyhedron(name={self.name}, vertices={len(self.vertices)}, faces={len(self.faces)})"
@@ -531,9 +474,6 @@ def main():
     auto_rotate = {'x': False, 'y': True, 'z': False}
     projection_mode = 'perspective'  # 'perspective' или 'axonometric'
     
-    # Имя файла для загрузки/сохранения OBJ (можно изменить)
-    obj_filename = "model.obj"
-    
     running = True
     while running:
         for event in pygame.event.get():
@@ -587,21 +527,6 @@ def main():
                     center = polyhedron.get_center()
                     M = rotation_axis_through_center_matrix(center, 'z', 10)
                     polyhedron.apply_transform(M)
-
-                # Сохранение в OBJ
-                if event.key == pygame.K_f:  # F для "file save"
-                    polyhedron.to_obj(obj_filename)
-                    print(f"Модель сохранена в {obj_filename}")
-
-                # Загрузка из OBJ
-                if event.key == pygame.K_g:  # G для "get load"
-                    try:
-                        polyhedron = Polyhedron.from_obj(obj_filename)
-                        print(f"Модель загружена из {obj_filename}")
-                    except FileNotFoundError:
-                        print(f"Файл {obj_filename} не найден")
-                    except Exception as e:
-                        print(f"Ошибка загрузки: {e}")
 
         keys = pygame.key.get_pressed()
         
@@ -674,8 +599,6 @@ def main():
             "U/I/O: Поворот вокруг прямой через центр (X/Y/Z) на 10°",
             "K: Поворот вокруг произвольной прямой (по умолчанию задается в коде)",
             f"Arb line p1={arbitrary_p1} p2={arbitrary_p2} step={arbitrary_angle_step}° (нажмите K)",
-            "F: Сохранить в OBJ (model.obj)",
-            "G: Загрузить из OBJ (model.obj)"
         ]
         
         for i, line in enumerate(info):
