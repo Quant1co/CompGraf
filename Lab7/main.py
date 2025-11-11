@@ -561,7 +561,7 @@ def main():
         '3': create_octahedron,
         '4': create_icosahedron,
         '5': create_dodecahedron,
-        '6': lambda: create_surface_of_revolution(
+        '9': lambda: create_surface_of_revolution(
         generatrix=[(0, -100, 0), (40, -80, 0), (60, -20, 0), (40, 60, 0), (0, 100, 0)],
         axis='z',
         divisions=48,
@@ -585,9 +585,13 @@ def main():
                 running = False
             if event.type == pygame.KEYDOWN:
                 # Смена фигур
-                if '1' <= event.unicode <= '6':
+                if '1' <= event.unicode <= '5':
                     current_poly_key = event.unicode
                     polyhedron = polyhedrons[current_poly_key]()
+
+                if '9' == event.unicode:
+                    current_poly_key = event.unicode
+                    polyhedron = polyhedrons[current_poly_key]()    
                 
                 # Сброс
                 if event.key == pygame.K_r:
@@ -708,7 +712,7 @@ def main():
             "",
             "Управление:",
             "1-5: Сменить фигуру",
-            "6: Построение фигуры вращения",
+            "9: Построение фигуры вращения",
             "Стрелки: Смещение",
             "W/S, A/D, Q/E: Поворот",
             "+/-: Масштаб (относительно центра)",
