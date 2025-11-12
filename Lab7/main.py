@@ -525,6 +525,64 @@ def create_surface_of_revolution(generatrix: List[Tuple[float, float, float]], a
 
     return Polyhedron(vertices, faces, name)
 
+# --- Функция для построения графика двух переменных ---
+
+def create_surface_plot(func, x_range, y_range, steps, name="График функции"):
+    """
+    Создает сегмент поверхности по функции z = f(x, y).
+    :param func: функция двух переменных f(x, y)
+    :param x_range: кортеж (x_min, x_max)
+    :param y_range: кортеж (y_min, y_max)
+    :param steps: количество разбиений по каждой оси
+    :param name: название модели
+    :return: экземпляр Polyhedron
+    """
+    x_min, x_max = x_range
+    y_min, y_max = y_range
+    
+    x_step = (x_max - x_min) / steps
+    y_step = (y_max - y_min) / steps
+    
+    vertices = []
+    # Создаем сетку вершин
+    for i in range(steps + 1):
+        for j in range(steps + 1):
+            x = x_min + i * x_step
+            y = y_min + j * y_step
+            try:
+                z = func(x, y)
+                if not np.isfinite(z):  # Проверка на inf, -inf, nan
+                    z = 0 # Замена на 0, если результат не конечен
+            except (ValueError, ZeroDivisionError):
+                z = 0 # Обработка математических ошибок
+            vertices.append((x, y, z))
+            
+    faces = []
+    # Создаем грани (четырехугольники)
+    for i in range(steps):
+        for j in range(steps):
+            # Индексы вершин для текущего квадрата в сетке
+            idx1 = i * (steps + 1) + j
+            idx2 = (i + 1) * (steps + 1) + j
+            idx3 = (i + 1) * (steps + 1) + (j + 1)
+            idx4 = i * (steps + 1) + (j + 1)
+            faces.append((idx1, idx2, idx3, idx4))
+            
+    # Масштабируем для лучшей визуализации
+    poly = Polyhedron(vertices, faces, name)
+    center = poly.get_center()
+    poly.apply_transform(translation_matrix(-center.x, -center.y, -center.z))
+    
+    # Найдем максимальный размер и смасштабируем до ~200
+    max_dim = max(abs(v.x) for v in poly.vertices)
+    max_dim = max(max_dim, max(abs(v.y) for v in poly.vertices))
+    max_dim = max(max_dim, max(abs(v.z) for v in poly.vertices))
+    if max_dim > 1e-6:
+        scale_factor = 150 / max_dim
+        poly.apply_transform(scale_matrix(scale_factor, scale_factor, scale_factor))
+        
+    return poly
+
 
 # --- Основная часть программы ---
 
@@ -561,6 +619,12 @@ def main():
         '3': create_octahedron,
         '4': create_icosahedron,
         '5': create_dodecahedron,
+        '0': lambda: create_surface_plot(
+            func=lambda x, y: 50 * np.sin(np.sqrt(x**2 + y**2) / 10),
+            x_range=(-50, 50),
+            y_range=(-50, 50),
+            steps=30
+        ),
         '9': lambda: create_surface_of_revolution(
         generatrix=[(0, -100, 0), (40, -80, 0), (60, -20, 0), (40, 60, 0), (0, 100, 0)],
         axis='z',
@@ -585,7 +649,7 @@ def main():
                 running = False
             if event.type == pygame.KEYDOWN:
                 # Смена фигур
-                if '1' <= event.unicode <= '5':
+                if '0' <= event.unicode <= '5':
                     current_poly_key = event.unicode
                     polyhedron = polyhedrons[current_poly_key]()
 
@@ -712,6 +776,7 @@ def main():
             "",
             "Управление:",
             "1-5: Сменить фигуру",
+            "0: Построение графика функции",
             "9: Построение фигуры вращения",
             "Стрелки: Смещение",
             "W/S, A/D, Q/E: Поворот",
