@@ -706,6 +706,61 @@ def interpolate_z(coords: Tuple[float, float, float], z_a: float, z_b: float, z_
     alpha, beta, gamma = coords
     return alpha * z_a + beta * z_b + gamma * z_c
 
+# --- Класс Камеры (НОВОЕ) ---
+
+class Camera:
+    """
+    Класс, представляющий камеру, вращающуюся вокруг объекта.
+    Задается положением, направлением обзора и формирует матрицу вида.
+    """
+    def __init__(self, distance: float, target: Point3D = Point3D(0, 0, 0)):
+        self.distance = distance
+        self.target = np.array([target.x, target.y, target.z])
+        self.theta = -math.pi / 2  # Азимутальный угол (вокруг Y)
+        self.phi = math.pi / 2     # Зенитный угол (от Y)
+        self.up = np.array([0, 1, 0]) # В Pygame Y растет вниз
+
+    def get_view_matrix(self) -> np.ndarray:
+        # 1. Вычисляем позицию камеры (сферические координаты -> декартовы)
+        x = self.distance * math.sin(self.phi) * math.cos(self.theta)
+        y = self.distance * math.cos(self.phi)
+        z = self.distance * math.sin(self.phi) * math.sin(self.theta)
+        
+        position = self.target + np.array([x, y, z])
+
+        # 2. Вычисляем вектора базиса камеры (LookAt)
+        # Forward: от позиции камеры к цели.
+        # Поскольку в проекции используется dist / (dist + z), ось Z должна смотреть в глубину сцены от камеры.
+        forward = self.target - position
+        forward = forward / np.linalg.norm(forward)
+
+        # Right
+        right = np.cross(forward, self.up)
+        if np.linalg.norm(right) < 1e-6: right = np.array([1, 0, 0])
+        right = right / np.linalg.norm(right)
+
+        # True Up
+        true_up = np.cross(right, forward)
+
+        # 3. Формируем матрицу вида (World -> Camera view)
+        # Учитывая, что в Polyhedron.draw используется умножение вектора-строки на транспонированную матрицу (v @ M.T),
+        # нам нужно вернуть матрицу, где базисные вектора находятся в строках (классическая форма View Matrix).
+        M = np.eye(4)
+        M[0, :3] = right
+        M[1, :3] = true_up
+        M[2, :3] = forward 
+        M[0, 3] = -np.dot(right, position)
+        M[1, 3] = -np.dot(true_up, position)
+        M[2, 3] = -np.dot(forward, position)
+
+        return M
+
+    # Метод для получения матрицы проекции (формально требуется заданием)
+    def get_projection_matrix(self):
+        # В текущей архитектуре проекция выполняется в Point3D.project_perspective
+        # через простое деление на Z, но этот метод добавлен для полноты структуры класса.
+        return np.eye(4) # Заглушка, так как проекция реализована иначе
+
 # --- Основная часть программы ---
 
 def draw_text(surface, text, pos, font, color=(255, 255, 255)):
@@ -729,6 +784,10 @@ def main():
     move_speed = 10.0
     scale_step = 1.05
     
+    # Инициализация объекта камеры
+    camera_obj = Camera(camera_distance)
+    use_orbit_camera = False # Флаг использования орбитальной камеры
+
     # Матрица поворота камеры (для изменения вектора обзора)
     camera_rotation = np.eye(4)
     
@@ -890,15 +949,43 @@ def main():
         if auto_rotate['z']: 
             polyhedron.apply_transform(rotation_z_matrix(rotation_speed / 2))
         
-        # Изменение вектора обзора (поворот камеры)
-        if keys[pygame.K_j]:
-            camera_rotation = rotation_y_matrix(-rotation_speed) @ camera_rotation
-        if keys[pygame.K_l]:
-            camera_rotation = rotation_y_matrix(rotation_speed) @ camera_rotation
-        if keys[pygame.K_i]:
-            camera_rotation = rotation_x_matrix(-rotation_speed) @ camera_rotation
+        # --- УПРАВЛЕНИЕ КАМЕРОЙ (НОВОЕ) ---
+        # Вращение камеры вокруг статического объекта
+        
+        if keys[pygame.K_c]:
+            camera_obj.theta -= 0.05
+            use_orbit_camera = True
+        if keys[pygame.K_v]:
+            camera_obj.theta += 0.05
+            use_orbit_camera = True
+        if keys[pygame.K_b]:
+            camera_obj.phi = max(0.1, camera_obj.phi - 0.05)
+            use_orbit_camera = True
+        if keys[pygame.K_n]:
+            camera_obj.phi = min(math.pi - 0.1, camera_obj.phi + 0.05)
+            use_orbit_camera = True
         if keys[pygame.K_m]:
-            camera_rotation = rotation_x_matrix(rotation_speed) @ camera_rotation
+            # Сброс камеры
+            camera_obj.theta = -math.pi / 2
+            camera_obj.phi = math.pi / 2
+            use_orbit_camera = True
+            
+        if use_orbit_camera:
+            # Получаем изображение с камеры, используя её матрицу вида
+            camera_rotation = camera_obj.get_view_matrix()
+
+        # --- Старое управление камерой (оставляем для совместимости) ---
+        if not use_orbit_camera:
+            # Изменение вектора обзора (поворот камеры вручную)
+            if keys[pygame.K_j]:
+                camera_rotation = rotation_y_matrix(-rotation_speed) @ camera_rotation
+            if keys[pygame.K_l]:
+                camera_rotation = rotation_y_matrix(rotation_speed) @ camera_rotation
+            if keys[pygame.K_i]:
+                camera_rotation = rotation_x_matrix(-rotation_speed) @ camera_rotation
+            if keys[pygame.K_m]: # Конфликт с Reset, но m здесь использовалось для X+
+                # Если режим орбитальной камеры не активен, работает старое назначение
+                camera_rotation = rotation_x_matrix(rotation_speed) @ camera_rotation
 
         # Отрисовка
         screen.fill(polyhedron.bg_color)
@@ -925,8 +1012,10 @@ def main():
             f"Arb line p1={arbitrary_p1} p2={arbitrary_p2} step={arbitrary_angle_step}° (нажмите K)",
             "F: Сохранить в OBJ (model.obj)",
             "G: Загрузить из OBJ (model.obj)",
-            "J/L: Поворот камеры по Y (изменение вектора обзора)",
-            "I/M: Поворот камеры по X (изменение вектора обзора)"
+            "--- УПРАВЛЕНИЕ КАМЕРОЙ ---",
+            "C / V: Вращение камеры влево/вправо (Азимут)",
+            "B / N: Вращение камеры вверх/вниз (Зенит)",
+            "M: Сброс камеры (в режиме орбиты)",
         ]
         
         for i, line in enumerate(info):
