@@ -34,7 +34,12 @@ class Point3D:
         """
         Перспективная проекция.
         """
-        factor = camera_distance / (camera_distance + self.z)
+        # Защита от деления на ноль или ухода точки за камеру
+        if self.z <= -camera_distance + 1:
+            factor = 0
+        else:
+            factor = camera_distance / (camera_distance + self.z)
+            
         screen_x = int(self.x * factor + screen_width / 2)
         screen_y = int(self.y * factor + screen_height / 2)
         return (screen_x, screen_y)
@@ -99,7 +104,7 @@ class Polygon:
         normal = np.cross(v1, v2)
         return normal
     
-    def draw(self, surface, projected_points: List[Tuple[int, int]], line_width: int = 2):
+    def draw(self, surface, projected_points: List[Tuple[int, int]], line_width: int = 1):
         """
         Отрисовка многоугольника на экране.
         :param surface: поверхность pygame для рисования
@@ -107,10 +112,6 @@ class Polygon:
         :param line_width: толщина линии
         """
         points = [projected_points[i] for i in self.vertex_indices]
-        
-        if self.fill_color:
-            pygame.draw.polygon(surface, self.fill_color, points)
-        
         pygame.draw.polygon(surface, self.color, points, line_width)
     
     def __repr__(self):
@@ -179,15 +180,99 @@ class Polyhedron:
         avg_z = sum(v.z for v in self.vertices) / len(self.vertices)
         return Point3D(avg_x, avg_y, avg_z)
     
-    def draw(self, surface, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective', camera_rotation: np.ndarray = np.eye(4)):
+    def draw(self, surface, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective', camera_rotation: np.ndarray = np.eye(4), z_buffer: np.ndarray = None):
         """
-        Проецирует и отрисовывает многогранник.
-        :param surface: поверхность pygame для рисования
-        :param camera_distance: расстояние до камеры
-        :param screen_width: ширина экрана
-        :param screen_height: высота экрана
-        :param projection_mode: режим проекции: 'perspective' или 'axonometric'
-        :param camera_rotation: матрица поворота камеры
+        Проецирует и отрисовывает многогранник с использованием Z-буфера.
+        """
+        if z_buffer is None:
+            # Если z-буфер не предоставлен, используется старый метод отрисовки
+            self.draw_legacy(surface, camera_distance, screen_width, screen_height, projection_mode, camera_rotation)
+            return
+
+        if projection_mode == 'axonometric':
+            proj_matrix = axonometric_view_matrix()
+        else:
+            proj_matrix = np.eye(4)
+        
+        full_view = proj_matrix @ camera_rotation
+        
+        # Вычисляем viewed вершины
+        viewed_vertices = []
+        for vertex in self.vertices:
+            v_hom = vertex.homogeneous @ full_view.T
+            viewed = Point3D(v_hom[0], v_hom[1], v_hom[2])
+            viewed_vertices.append(viewed)
+        
+        # Проецируем вершины
+        if projection_mode == 'perspective':
+            projected_points = [v.project_perspective(camera_distance, screen_width, screen_height) for v in viewed_vertices]
+        else:  # axonometric
+            projected_points = [v.project_axonometric(screen_width, screen_height) for v in viewed_vertices]
+        
+        # Отрисовываем грани с использованием z-буфера
+        for face in self.faces:
+            # Backface culling
+            normal = face.calculate_normal(viewed_vertices)
+            if normal[2] >= 0:  # Грань отвернута от нас
+                continue
+
+            # Триангуляция грани (для простоты, предполагаем выпуклые многоугольники)
+            if len(face.vertex_indices) < 3:
+                continue
+            
+            # Цвет грани
+            norm_len = np.linalg.norm(normal)
+            if norm_len > 0:
+                light_vec = np.array([0, 0, 1]) # Свет светит из-за камеры
+                cos_angle = np.dot(normal, light_vec) / norm_len
+                intensity = max(0.2, -cos_angle) # Добавим ambient light
+                face_color = (int(50 + 150 * intensity), int(50 + 150 * intensity), int(50 + 200 * intensity))
+            else:
+                face_color = (100, 100, 100)
+
+
+            # Разбиваем на треугольники от первой вершины
+            v0_idx = face.vertex_indices[0]
+            for i in range(1, len(face.vertex_indices) - 1):
+                v1_idx = face.vertex_indices[i]
+                v2_idx = face.vertex_indices[i + 1]
+                
+                p0, p1, p2 = projected_points[v0_idx], projected_points[v1_idx], projected_points[v2_idx]
+                z0, z1, z2 = viewed_vertices[v0_idx].z, viewed_vertices[v1_idx].z, viewed_vertices[v2_idx].z
+
+                # Ограничивающий прямоугольник для треугольника
+                x_min = max(0, min(p0[0], p1[0], p2[0]))
+                x_max = min(screen_width - 1, max(p0[0], p1[0], p2[0]))
+                y_min = max(0, min(p0[1], p1[1], p2[1]))
+                y_max = min(screen_height - 1, max(p0[1], p1[1], p2[1]))
+                
+                # Проверка размера bbox, чтобы не виснуть на больших гранях при глюках
+                if (x_max - x_min) * (y_max - y_min) > 500000: 
+                    continue
+
+                # Проход по пикселям в ограничивающем прямоугольнике
+                for x in range(x_min, x_max + 1):
+                    for y in range(y_min, y_max + 1):
+                        coords = barycentric_coords((x, y), p0, p1, p2)
+                        if coords is None: continue
+                        
+                        alpha, beta, gamma = coords
+                        # Если точка внутри треугольника
+                        if alpha >= 0 and beta >= 0 and gamma >= 0:
+                            # Интерполируем z
+                            interpolated_z = interpolate_z(coords, z0, z1, z2)
+                            
+                            # Проверка z-буфера
+                            if interpolated_z < z_buffer[y, x]:
+                                z_buffer[y, x] = interpolated_z
+                                surface.set_at((x, y), face_color)
+            
+            # Отрисовка рёбер поверх
+            face.draw(surface, projected_points)
+
+    def draw_legacy(self, surface, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective', camera_rotation: np.ndarray = np.eye(4)):
+        """
+        Проецирует и отрисовывает многогранник (старый метод с сортировкой).
         """
         if projection_mode == 'axonometric':
             proj_matrix = axonometric_view_matrix()
@@ -223,7 +308,11 @@ class Polyhedron:
             # Backface culling
             normal = face.calculate_normal(viewed_vertices)
             if normal[2] < 0:  # Грань повернута к нам (dot(normal, [0,0,1]) < 0)
+                # Заливка грани
+                points = [projected_points[i] for i in face.vertex_indices]
+                pygame.draw.polygon(surface, (50, 50, 80), points) # Заливка цветом фона
                 face.draw(surface, projected_points)
+    
     
     def get_info(self) -> str:
         """
@@ -585,6 +674,79 @@ def create_surface_plot(func, x_range, y_range, steps, name="График фун
     return poly
 
 
+# --- Z-buffer функции ---
+
+def barycentric_coords(p: Tuple[int, int], a: Tuple[int, int], b: Tuple[int, int], c: Tuple[int, int]) -> Tuple[float, float, float]:
+    """
+    Вычисляет барицентрические координаты точки p относительно треугольника (a, b, c).
+    Возвращает (alpha, beta, gamma), или None если треугольник вырожден.
+    """
+    det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+    if abs(det) < 1e-6:
+        return None  # Вырожденный треугольник
+
+    alpha = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / det
+    beta = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / det
+    gamma = 1.0 - alpha - beta
+    
+    return alpha, beta, gamma
+
+def interpolate_z(coords: Tuple[float, float, float], z_a: float, z_b: float, z_c: float) -> float:
+    """Интерполирует Z-координату с использованием барицентрических координат."""
+    alpha, beta, gamma = coords
+    return alpha * z_a + beta * z_b + gamma * z_c
+
+# --- Класс КАМЕРЫ (Новая функция) ---
+
+class Camera:
+    """
+    Класс камеры для вращения вокруг статического объекта.
+    Управляется сферическими координатами (theta, phi) и дистанцией.
+    """
+    def __init__(self, distance: float, target: Point3D = Point3D(0, 0, 0)):
+        self.distance = distance
+        self.target = np.array([target.x, target.y, target.z])
+        # Начальные углы:
+        self.theta = -math.pi / 2  # Азимут
+        self.phi = math.pi / 2     # Зенит
+        self.up = np.array([0, 1, 0])
+
+    def get_rotation_matrix(self) -> np.ndarray:
+        """
+        Возвращает матрицу ВРАЩЕНИЯ камеры.
+        Важно: Мы не включаем перенос (Translation), так как функция project_perspective
+        уже использует camera_distance в делителе (фактически перемещая камеру по Z).
+        Поэтому здесь нам нужно только повернуть мир так, чтобы он "смотрел" на камеру.
+        """
+        # 1. Позиция камеры в сферических координатах
+        x = self.distance * math.sin(self.phi) * math.cos(self.theta)
+        y = self.distance * math.cos(self.phi)
+        z = self.distance * math.sin(self.phi) * math.sin(self.theta)
+        
+        position = np.array([x, y, z])
+        
+        # 2. Вектора базиса (LookAt)
+        # Forward (F): от камеры к цели
+        f = self.target - position
+        f = f / np.linalg.norm(f)
+        
+        # Right (R): перпендикулярно F и Up
+        r = np.cross(f, self.up)
+        if np.linalg.norm(r) < 1e-6:
+            r = np.array([1, 0, 0])
+        r = r / np.linalg.norm(r)
+        
+        # True Up (U): перпендикулярно R и F
+        u = np.cross(r, f)
+        
+        # 3. Матрица вращения (строки - это базисные вектора камеры)
+        M = np.eye(4)
+        M[0, :3] = r
+        M[1, :3] = -u  # Инвертируем Y для экранных координат (Y вниз)
+        M[2, :3] = f   # Z смотрит от камеры
+        
+        return M
+
 # --- Основная часть программы ---
 
 def draw_text(surface, text, pos, font, color=(255, 255, 255)):
@@ -608,6 +770,10 @@ def main():
     move_speed = 10.0
     scale_step = 1.05
     
+    # Инициализация камеры
+    camera_obj = Camera(camera_distance)
+    use_orbit_camera = False # Флаг использования орбитальной камеры
+
     # Матрица поворота камеры (для изменения вектора обзора)
     camera_rotation = np.eye(4)
     
@@ -695,7 +861,7 @@ def main():
                     center = polyhedron.get_center()
                     M = rotation_axis_through_center_matrix(center, 'x', 10)
                     polyhedron.apply_transform(M)
-                if event.key == pygame.K_i:  # вокруг оси Y через центр
+                if event.key == pygame.K_i and not use_orbit_camera:  # Исключаем конфликт с I если не активна орбита
                     center = polyhedron.get_center()
                     M = rotation_axis_through_center_matrix(center, 'y', 10)
                     polyhedron.apply_transform(M)
@@ -769,15 +935,45 @@ def main():
         if auto_rotate['z']: 
             polyhedron.apply_transform(rotation_z_matrix(rotation_speed / 2))
         
-        # Изменение вектора обзора (поворот камеры)
-        if keys[pygame.K_j]:
-            camera_rotation = rotation_y_matrix(-rotation_speed) @ camera_rotation
-        if keys[pygame.K_l]:
-            camera_rotation = rotation_y_matrix(rotation_speed) @ camera_rotation
-        if keys[pygame.K_i]:
-            camera_rotation = rotation_x_matrix(-rotation_speed) @ camera_rotation
-        if keys[pygame.K_m]:
-            camera_rotation = rotation_x_matrix(rotation_speed) @ camera_rotation
+        # --- УПРАВЛЕНИЕ КАМЕРОЙ (НОВОЕ ЗАДАНИЕ) ---
+        
+        camera_changed = False
+        if keys[pygame.K_c]:
+            camera_obj.theta -= 0.03
+            use_orbit_camera = True
+            camera_changed = True
+        if keys[pygame.K_v]:
+            camera_obj.theta += 0.03
+            use_orbit_camera = True
+            camera_changed = True
+        if keys[pygame.K_b]:
+            camera_obj.phi = max(0.1, camera_obj.phi - 0.03) # Ограничение, чтобы не перевернулось
+            use_orbit_camera = True
+            camera_changed = True
+        if keys[pygame.K_n]:
+            camera_obj.phi = min(math.pi - 0.1, camera_obj.phi + 0.03)
+            use_orbit_camera = True
+            camera_changed = True
+        if keys[pygame.K_m]: # Сброс по заданию
+            camera_obj.theta = -math.pi / 2
+            camera_obj.phi = math.pi / 2
+            use_orbit_camera = True
+            camera_changed = True
+        
+        if use_orbit_camera:
+            camera_rotation = camera_obj.get_rotation_matrix()
+        else:
+            # Старое управление (если не трогали орбитальную камеру)
+            # Изменение вектора обзора (поворот камеры)
+            if keys[pygame.K_j]:
+                camera_rotation = rotation_y_matrix(-rotation_speed) @ camera_rotation
+            if keys[pygame.K_l]:
+                camera_rotation = rotation_y_matrix(rotation_speed) @ camera_rotation
+            if keys[pygame.K_i]:
+                camera_rotation = rotation_x_matrix(-rotation_speed) @ camera_rotation
+            # M был занят старой функцией, но теперь он на Reset камеры.
+            # Для совместимости можно оставить тут логику, если M не нажат как ресет
+            pass 
 
         # Отрисовка
         screen.fill(polyhedron.bg_color)
@@ -804,8 +1000,10 @@ def main():
             f"Arb line p1={arbitrary_p1} p2={arbitrary_p2} step={arbitrary_angle_step}° (нажмите K)",
             "F: Сохранить в OBJ (model.obj)",
             "G: Загрузить из OBJ (model.obj)",
-            "J/L: Поворот камеры по Y (изменение вектора обзора)",
-            "I/M: Поворот камеры по X (изменение вектора обзора)"
+            "--- НОВОЕ УПРАВЛЕНИЕ КАМЕРОЙ ---",
+            "C / V: Вращение влево / вправо (Азимут)",
+            "B / N: Вращение вверх / вниз (Зенит)",
+            "M: Сброс камеры"
         ]
         
         for i, line in enumerate(info):
