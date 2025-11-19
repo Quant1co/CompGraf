@@ -267,8 +267,21 @@ class Polyhedron:
                                 z_buffer[y, x] = interpolated_z
                                 surface.set_at((x, y), face_color)
             
-            # Отрисовка рёбер поверх
-            face.draw(surface, projected_points)
+            # Отрисовка рёбер с учетом z-буфера
+            indices = face.vertex_indices
+            edge_color = self.edge_color
+            for i in range(len(indices)):
+                idx_a = indices[i]
+                idx_b = indices[(i + 1) % len(indices)]
+                draw_line_with_z(
+                    surface,
+                    z_buffer,
+                    projected_points[idx_a],
+                    projected_points[idx_b],
+                    viewed_vertices[idx_a].z,
+                    viewed_vertices[idx_b].z,
+                    edge_color,
+                )
 
     def draw_legacy(self, surface, camera_distance: float, screen_width: int, screen_height: int, projection_mode: str = 'perspective', camera_rotation: np.ndarray = np.eye(4)):
         """
@@ -695,6 +708,45 @@ def interpolate_z(coords: Tuple[float, float, float], z_a: float, z_b: float, z_
     """Интерполирует Z-координату с использованием барицентрических координат."""
     alpha, beta, gamma = coords
     return alpha * z_a + beta * z_b + gamma * z_c
+
+
+def draw_line_with_z(surface, z_buffer: np.ndarray, p_start: Tuple[int, int], p_end: Tuple[int, int],
+                     z_start: float, z_end: float, color: Tuple[int, int, int]):
+    """Рисует линию, учитывая z-буфер, чтобы не показывать скрытые рёбра."""
+    x0, y0 = p_start
+    x1, y1 = p_end
+
+    dx = x1 - x0
+    dy = y1 - y0
+    steps = int(max(abs(dx), abs(dy)))
+
+    if steps == 0:
+        if 0 <= x0 < z_buffer.shape[1] and 0 <= y0 < z_buffer.shape[0]:
+            if z_start <= z_buffer[y0, x0] + 1e-4:
+                z_buffer[y0, x0] = z_start
+                surface.set_at((x0, y0), color)
+        return
+
+    x_step = dx / steps
+    y_step = dy / steps
+    z_step = (z_end - z_start) / steps
+
+    x = x0
+    y = y0
+    z = z_start
+    width = z_buffer.shape[1]
+    height = z_buffer.shape[0]
+
+    for _ in range(steps + 1):
+        xi = int(round(x))
+        yi = int(round(y))
+        if 0 <= xi < width and 0 <= yi < height:
+            if z <= z_buffer[yi, xi] + 1e-4:
+                z_buffer[yi, xi] = z
+                surface.set_at((xi, yi), color)
+        x += x_step
+        y += y_step
+        z += z_step
 
 # --- Класс КАМЕРЫ (Новая функция) ---
 
