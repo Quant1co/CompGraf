@@ -977,7 +977,17 @@ def main():
 
         # Отрисовка
         screen.fill(polyhedron.bg_color)
-        polyhedron.draw(screen, camera_distance, screen_width, screen_height, projection_mode, camera_rotation)
+        # Обновляем z-буфер для текущего кадра, чтобы корректно учитывать взаимное перекрытие граней
+        z_buffer = np.full((screen_height, screen_width), np.inf, dtype=float)
+        polyhedron.draw(
+            screen,
+            camera_distance,
+            screen_width,
+            screen_height,
+            projection_mode=projection_mode,
+            camera_rotation=camera_rotation,
+            z_buffer=z_buffer,
+        )
         
         # Интерфейс
         info = [
