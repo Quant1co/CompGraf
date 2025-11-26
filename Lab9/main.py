@@ -113,6 +113,7 @@ class Polyhedron:
         self.show_faces = False
         
         # Параметры освещения/шейдинга
+        # ЗАДАНИЕ 1: Добавить положение источника света и цвет объекта
         self.object_color = (180, 200, 255)
         self.light_color = (255, 255, 255)
         self.light_position = np.array([400.0, 400.0, 600.0, 1.0])
@@ -142,9 +143,14 @@ class Polyhedron:
                 normal = face.calculate_normal(self.vertices)
     
     def apply_transform(self, matrix: np.ndarray):
+        """
+        ЗАДАНИЕ 1: Добавить возможность применения аффинных преобразований к объекту.
+        """
         for vertex in self.vertices:
             vertex.apply_transform(matrix)
         if self.obj_vertex_normals is not None:
+            # Для нормалей используем транспонированную обратную матрицу,
+            # чтобы сохранить перпендикулярность поверхности при масштабировании.
             try:
                 normal_matrix = np.linalg.inv(matrix).T
             except np.linalg.LinAlgError:
@@ -213,6 +219,7 @@ class Polyhedron:
         # Отрисовываем грани
         for face in self.faces:
             # Backface culling
+            # ЗАДАНИЕ 1: Удаление нелицевых граней (если нормаль смотрит от камеры)
             normal = face.calculate_normal(viewed_vertices)
             if normal[2] > 1e-6:
                 continue
@@ -245,10 +252,12 @@ class Polyhedron:
                 v0, v1, v2 = viewed_vertices[v0_idx].v, viewed_vertices[v1_idx].v, viewed_vertices[v2_idx].v
 
                 if self.shading_mode == 'gouraud':
+                    # ЗАДАНИЕ 1.1: Шейдинг Гуро. Вычисляем цвет в каждой вершине по модели Ламберта.
                     c0 = np.array(self.vertex_color_lambert(viewed_vertices[v0_idx], vertex_normals_view[v0_idx], light_view))
                     c1 = np.array(self.vertex_color_lambert(viewed_vertices[v1_idx], vertex_normals_view[v1_idx], light_view))
                     c2 = np.array(self.vertex_color_lambert(viewed_vertices[v2_idx], vertex_normals_view[v2_idx], light_view))
                 elif self.shading_mode == 'phong_toon':
+                    # ЗАДАНИЕ 1.2: Шейдинг Фонга. Подготовка нормалей для интерполяции.
                     n0 = vertex_normals_view[v0_idx]
                     n1 = vertex_normals_view[v1_idx]
                     n2 = vertex_normals_view[v2_idx]
@@ -304,15 +313,22 @@ class Polyhedron:
                                     if self.shading_mode == 'flat':
                                         surface.set_at((x, y), face_color)
                                     elif self.shading_mode == 'gouraud':
+                                        # ЗАДАНИЕ 1.1: Интерполируем цвет между цветами вершин (билинейная интерполяция).
                                         col = alpha * c0 + beta * c1 + gamma * c2
                                         col = np.clip(col, 0, 255).astype(int)
                                         surface.set_at((x, y), tuple(col))
                                     elif self.shading_mode == 'phong_toon':
+                                        # ЗАДАНИЕ 1.2: Шейдинг Фонга.
+                                        # 1. Интерполируем нормали между вершинами.
                                         n_interp = alpha * n0 + beta * n1 + gamma * n2
+                                        # 2. Нормализация интерполированной нормали.
                                         n_len = np.linalg.norm(n_interp)
                                         n_hat = n_interp / n_len if n_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+                                        
                                         pos_interp = alpha * pv0 + beta * pv1 + gamma * pv2
                                         pos_point = Point3D(pos_interp[0], pos_interp[1], pos_interp[2])
+                                        
+                                        # 3. Вычисляем цвет пикселя (модель туншейдинга).
                                         color = self.phong_toon_color(pos_point, n_hat, light_view)
                                         surface.set_at((x, y), color)
             
@@ -433,6 +449,10 @@ class Polyhedron:
 
     # --- Освещение ---
     def compute_vertex_normals(self, vertices: List[Point3D]) -> List[np.ndarray]:
+        """
+        ЗАДАНИЕ 1: Вычислить нормаль к каждой вершине.
+        Нормаль вершины вычисляется как усредненная нормаль прилегающих граней.
+        """
         normals = [np.zeros(3, dtype=float) for _ in vertices]
         for face in self.faces:
             if len(face.vertex_indices) < 3: continue
@@ -468,6 +488,10 @@ class Polyhedron:
         return transformed
 
     def vertex_color_lambert(self, position_view: Point3D, normal_view: np.ndarray, light_view: np.ndarray | None) -> Tuple[int, int, int]:
+        """
+        ЗАДАНИЕ 1.1: Вычислить цвет по модели Ламберта (диффузное отражение).
+        I = Ia + Id * (N * L)
+        """
         n = -normal_view
         ln = np.linalg.norm(n)
         n = n / ln if ln > 1e-6 else np.array([0.0, 0.0, 1.0])
@@ -486,6 +510,10 @@ class Polyhedron:
         return tuple((rgb * 255).astype(int))
 
     def phong_toon_color(self, position_view: Point3D, normal_view: np.ndarray, light_view: np.ndarray | None) -> Tuple[int, int, int]:
+        """
+        ЗАДАНИЕ 1.2: Вычислить цвет в соответствии с моделью туншейдинга.
+        Дискретизация интенсивности освещения.
+        """
         n = -normal_view
         ln = np.linalg.norm(n)
         n = n / ln if ln > 1e-6 else np.array([0.0, 0.0, 1.0])
