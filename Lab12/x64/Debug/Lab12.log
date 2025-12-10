@@ -1,0 +1,8 @@
+﻿  main.cpp
+D:\CompGraf\Lab12\main.cpp(379,61): warning C4267: аргумент: преобразование из "size_t" в "GLsizei"; возможна потеря данных
+D:\CompGraf\Lab12\main.cpp(393,54): warning C4267: аргумент: преобразование из "size_t" в "GLsizei"; возможна потеря данных
+D:\CompGraf\Lab12\main.cpp(410,54): warning C4267: аргумент: преобразование из "size_t" в "GLsizei"; возможна потеря данных
+D:\CompGraf\Lab12\main.cpp(420,56): warning C4267: аргумент: преобразование из "size_t" в "GLsizei"; возможна потеря данных
+  Lab12.vcxproj -> D:\CompGraf\Lab12\x64\Debug\Lab12.exe
+  "pwsh.exe" не является внутренней или внешней
+  командой, исполняемой программой или пакетным файлом.
