@@ -7,24 +7,25 @@ using System.Threading.Tasks;
 
 namespace RayTracing
 {
+    // Сфера как геометрическая фигура для трассировки
     public class Sphere: Figure
     {
-        float radius;
-
-        public Pen drawing_pen = new Pen(Color.Black);
+        float radius;                       // радиус сферы
+        public Pen drawing_pen = new Pen(Color.Black); // перо для определения цвета
 
         public Sphere(Point3D p, float r)
         {
-            points.Add(p);
+            points.Add(p);   // центр сферы хранится в points[0]
             radius = r; 
         }
 
+        // Пересечение луча со сферой: решает квадратное уравнение и возвращает ближнюю положительную t
         public static bool ray_sphere_intersection(Ray r, Point3D sphere_pos, float sphere_rad, out float t)
         {
-            Point3D k = r.start - sphere_pos;
-            float b = Point3D.scalar(k, r.direction);
+            Point3D k = r.start - sphere_pos;           // вектор от центра сферы к старту луча
+            float b = Point3D.scalar(k, r.direction);   // проекция k на направление луча
             float c = Point3D.scalar(k, k) - sphere_rad * sphere_rad;
-            float d = b * b - c;
+            float d = b * b - c;                        // дискриминант
             t = 0;
 
             if (d >= 0)
@@ -36,7 +37,7 @@ namespace RayTracing
                 float min_t = Math.Min(t1, t2);
                 float max_t = Math.Max(t1, t2);
 
-                t = (min_t > EPS) ? min_t : max_t;
+                t = (min_t > EPS) ? min_t : max_t;      // выбираем ближайшую положительную t
                 return t > EPS;
             }
             return false;
@@ -44,10 +45,10 @@ namespace RayTracing
 
         public override void set_pen(Pen dw)
         {
-            drawing_pen = dw;
-
+            drawing_pen = dw; // задаём перо для цвета
         }
 
+        // Пересечение луча с текущей сферой; заполняет t и нормаль
         public override bool figure_intersection(Ray r, out float t, out Point3D normal)
         {
             t = 0;
@@ -55,8 +56,9 @@ namespace RayTracing
 
             if (ray_sphere_intersection(r, points[0], radius, out t) && (t > EPS))
             {
-                normal = (r.start + r.direction * t) - points[0];
-                normal = Point3D.norm(normal);
+                normal = (r.start + r.direction * t) - points[0]; // вектор от центра к точке пересечения
+                normal = Point3D.norm(normal);                     // нормализация
+                // Цвет материала берём из пера
                 figure_material.clr = new Point3D(drawing_pen.Color.R / 255f, drawing_pen.Color.G / 255f, drawing_pen.Color.B / 255f);
                 return true;
             }

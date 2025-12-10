@@ -6,9 +6,10 @@ using System.Threading.Tasks;
 
 namespace RayTracing
 {
+    // Простейший 3D-вектор с базовыми операциями: длина, нормализация, скалярное и векторное произведения
     public class Point3D
     {
-        public float x, y, z;
+        public float x, y, z; // компоненты
 
         public Point3D()
         {
@@ -43,6 +44,7 @@ namespace RayTracing
             return (float)Math.Sqrt(x * x + y * y + z * z);
         }
 
+        // Базовые операции над векторами/точками
         public static Point3D operator -(Point3D p1, Point3D p2)
         {
             return new Point3D(p1.x - p2.x, p1.y - p2.y, p1.z - p2.z);
@@ -66,6 +68,7 @@ namespace RayTracing
             return new Point3D(p1.x + p2.x, p1.y + p2.y, p1.z + p2.z);
         }
 
+        // Векторное произведение p1 × p2
         public static Point3D operator *(Point3D p1, Point3D p2)
         {
             return new Point3D(p1.y * p2.z - p1.z * p2.y, p1.z * p2.x - p1.x * p2.z, p1.x * p2.y - p1.y * p2.x);

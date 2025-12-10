@@ -7,12 +7,13 @@ using System.Threading.Tasks;
 
 namespace RayTracing
 {
+    // Грань (сторона) полигональной фигуры
     public class Side
     {
-        public Figure host = null;
-        public List<int> points = new List<int>();
-        public Pen drawing_pen = new Pen(Color.Black);
-        public Point3D Normal;
+        public Figure host = null;              // фигура-владелец (для доступа к координатам точек)
+        public List<int> points = new List<int>(); // индексы точек грани в массиве host.points
+        public Pen drawing_pen = new Pen(Color.Black); // перо/цвет грани
+        public Point3D Normal;                   // сохранённая нормаль (не используется напрямую)
 
         public Side(Figure h = null)
         { 
@@ -27,6 +28,7 @@ namespace RayTracing
             Normal = new Point3D(s.Normal);
         }
 
+        // Получить координаты точки грани по индексу
         public Point3D get_point(int ind)
         {
             if (host != null)
@@ -34,6 +36,7 @@ namespace RayTracing
             return null;
         }
 
+        // Вычислить нормаль грани по списку её точек (векторное произведение двух рёбер)
         public static Point3D norm(Side S)
         {
             if (S.points.Count() < 3)
