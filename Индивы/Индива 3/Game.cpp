@@ -16,6 +16,9 @@ static constexpr int CLOUD_COUNT = 6;
 static constexpr int BALLOON_COUNT = 3;
 static constexpr int LAMP_COUNT = 4;
 
+static GLuint unlitProgram = 0;
+static GLuint unlitWaveProgram = 0;
+
 Game::Game()
     : window(sf::VideoMode(1280, 720), "Airship Delivery", sf::Style::Default,
         [] {
@@ -41,6 +44,8 @@ void Game::cleanup()
 {
     if (litProgram) glDeleteProgram(litProgram);
     if (targetProgram) glDeleteProgram(targetProgram);
+    if (unlitProgram) glDeleteProgram(unlitProgram);
+    if (unlitWaveProgram) glDeleteProgram(unlitWaveProgram);
 
     auto deleteMesh = [](Mesh& m) {
         if (m.vbo) glDeleteBuffers(1, &m.vbo);
@@ -95,6 +100,45 @@ bool Game::init()
             vNormal = normalize(uNormalMatrix * aNormal);
             vUV = aUV;
             gl_Position = uMVP * vec4(pos, 1.0);
+        }
+    )";
+
+    const char* unlitVertex = R"(
+        #version 330 core
+        layout(location = 0) in vec3 aPos;
+        uniform mat4 uMVP;
+        void main()
+        {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+        }
+    )";
+
+    const char* unlitWaveVertex = R"(
+        #version 330 core
+        layout(location = 0) in vec3 aPos;
+        uniform mat4 uMVP;
+        uniform float uWaveAmount;
+        uniform float uTime;
+        void main()
+        {
+            vec3 pos = aPos;
+            if(uWaveAmount > 0.0){
+                // Колыхание усиливается к вершине (чем выше - тем сильнее)
+                float heightFactor = (pos.y + 0.5) * 0.5;
+                pos.x += sin(uTime * 2.0 + pos.y * 3.0) * uWaveAmount * heightFactor;
+                pos.z += cos(uTime * 1.5 + pos.y * 2.0) * uWaveAmount * heightFactor * 0.5;
+            }
+            gl_Position = uMVP * vec4(pos, 1.0);
+        }
+    )";
+
+    const char* unlitFragment = R"(
+        #version 330 core
+        uniform vec3 uColor;
+        out vec4 fragColor;
+        void main()
+        {
+            fragColor = vec4(uColor, 1.0);
         }
     )";
 
@@ -171,6 +215,8 @@ bool Game::init()
 
     litProgram = linkProgram(litVertex, litFragment);
     targetProgram = linkProgram(litVertex, targetFragment);
+    unlitProgram = linkProgram(unlitVertex, unlitFragment);
+    unlitWaveProgram = linkProgram(unlitWaveVertex, unlitFragment);
 
     cube = makeCube();
     quad = makeQuad();
@@ -427,23 +473,30 @@ void Game::render(float time)
     glClearColor(0.1f, 0.15f, 0.25f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Рисуем непрозрачную геометрию без blending.
+    // Blending включаем только для реально полупрозрачных объектов.
+    glDisable(GL_BLEND);
+
     Camera cam;
     cam.projection = glm::perspective(glm::radians(60.0f), window.getSize().x / static_cast<float>(window.getSize().y), 0.1f, 200.0f);
 
     glm::mat4 rot = glm::rotate(glm::mat4(1.0f), yaw, glm::vec3(0.0f, 1.0f, 0.0f));
     if (aimCamera)
     {
-        cam.position = airship.position + glm::vec3(0.0f, -0.8f, 0.0f);
+        // Режим прицеливания: камера под дирижаблем, смотрит строго вниз на землю
+        cam.position = airship.position + glm::vec3(0.0f, -0.5f, 0.0f);
+        cam.target = airship.position + glm::vec3(0.0f, -10.0f, 0.0f); // Смотрим вниз
+        // Используем направление "вперёд" дирижабля как "вверх" для камеры
         glm::vec3 forward = glm::vec3(rot * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f));
-        cam.target = cam.position + forward * 5.0f;
+        cam.view = glm::lookAt(cam.position, cam.target, forward);
     }
     else
     {
         glm::vec3 offset = glm::vec3(rot * glm::vec4(-5.0f, 5.0f, -8.0f, 0.0f));
         cam.position = airship.position + offset;
         cam.target = airship.position;
+        cam.view = glm::lookAt(cam.position, cam.target, glm::vec3(0.0f, 1.0f, 0.0f));
     }
-    cam.view = glm::lookAt(cam.position, cam.target, glm::vec3(0.0f, 1.0f, 0.0f));
 
     auto setCommonUniforms = [&](GLuint prog, float emission, float alpha)
         {
@@ -472,6 +525,33 @@ void Game::render(float time)
             glUniform1f(glGetUniformLocation(prog, "uTime"), time);
         };
 
+    auto drawMeshUnlit = [&](const Mesh& mesh, const Entity& e, const glm::vec3& color)
+        {
+            glm::mat4 model = composeModel(e);
+            glm::mat4 mvp = cam.projection * cam.view * model;
+            glUseProgram(unlitProgram);
+            glUniformMatrix4fv(glGetUniformLocation(unlitProgram, "uMVP"), 1, GL_FALSE, glm::value_ptr(mvp));
+            glUniform3f(glGetUniformLocation(unlitProgram, "uColor"), color.x, color.y, color.z);
+            glBindVertexArray(mesh.vao);
+            glDrawArrays(GL_TRIANGLES, 0, mesh.vertexCount);
+            glBindVertexArray(0);
+        };
+
+    // Функция для рисования объектов без освещения, но с колыханием (для ёлочек)
+    auto drawMeshUnlitWave = [&](const Mesh& mesh, const Entity& e, const glm::vec3& color, float wave)
+        {
+            glm::mat4 model = composeModel(e);
+            glm::mat4 mvp = cam.projection * cam.view * model;
+            glUseProgram(unlitWaveProgram);
+            glUniformMatrix4fv(glGetUniformLocation(unlitWaveProgram, "uMVP"), 1, GL_FALSE, glm::value_ptr(mvp));
+            glUniform3f(glGetUniformLocation(unlitWaveProgram, "uColor"), color.x, color.y, color.z);
+            glUniform1f(glGetUniformLocation(unlitWaveProgram, "uWaveAmount"), wave);
+            glUniform1f(glGetUniformLocation(unlitWaveProgram, "uTime"), time);
+            glBindVertexArray(mesh.vao);
+            glDrawArrays(GL_TRIANGLES, 0, mesh.vertexCount);
+            glBindVertexArray(0);
+        };
+
     auto drawMesh = [&](const Mesh& mesh, const Entity& e, GLuint prog, float wave, float emission, float alpha)
         {
             glm::mat4 model = composeModel(e);
@@ -496,69 +576,45 @@ void Game::render(float time)
     ground.color = { 0.15f, 0.35f, 0.1f };
     drawMesh(terrain, ground, litProgram, 0.0f, 0.0f, 1.0f);
 
-    // Ёлка: используем загруженную OBJ модель или fallback на примитивы
-    if (treeModel.vertexCount > 0) {
-        // Используем загруженную модель
-        // Временно отключаем culling для корректного отображения всех граней
-        glDisable(GL_CULL_FACE);
-        
-        glm::mat4 treeMatrix(1.0f);
-        treeMatrix = glm::translate(treeMatrix, treePos);
-        treeMatrix = glm::scale(treeMatrix, glm::vec3(1.2f, 1.2f, 1.2f)); // Масштаб модели
-        
-        glm::mat4 mvp = cam.projection * cam.view * treeMatrix;
-        glm::mat3 normal = glm::mat3(glm::transpose(glm::inverse(treeMatrix)));
-        glUseProgram(litProgram);
-        glUniformMatrix4fv(glGetUniformLocation(litProgram, "uMVP"), 1, GL_FALSE, glm::value_ptr(mvp));
-        glUniformMatrix4fv(glGetUniformLocation(litProgram, "uModel"), 1, GL_FALSE, glm::value_ptr(treeMatrix));
-        glUniformMatrix3fv(glGetUniformLocation(litProgram, "uNormalMatrix"), 1, GL_FALSE, glm::value_ptr(normal));
-        glUniform3f(glGetUniformLocation(litProgram, "uColor"), 0.15f, 0.45f, 0.2f); // Зелёный цвет ёлки
-        glUniform1f(glGetUniformLocation(litProgram, "uWaveAmount"), 0.0f); // Убрал волну для стабильности
-        setCommonUniforms(litProgram, 0.1f, 1.0f); // Добавил немного emission для яркости
-        glBindVertexArray(treeModel.vao);
-        glDrawArrays(GL_TRIANGLES, 0, treeModel.vertexCount);
-        glBindVertexArray(0);
-        
-        // Включаем culling обратно
-        glEnable(GL_CULL_FACE);
-    } else {
-        // Fallback: рисуем примитивами
+    // Ёлка: рисуем примитивами с лёгким колыханием
+    {
+        // Ствол (не колышется)
         Entity trunk;
         trunk.position = treePos + glm::vec3(0.0f, 0.5f, 0.0f);
         trunk.scale = { 0.4f, 1.0f, 0.4f };
         trunk.color = { 0.35f, 0.2f, 0.1f };
-        drawMesh(cube, trunk, litProgram, 0.0f, 0.0f, 1.0f);
+        drawMeshUnlit(cube, trunk, trunk.color);
         
-        // Нижний ярус (самый широкий)
+        // Нижний ярус (лёгкое колыхание)
         Entity cone1;
-        cone1.position = treePos + glm::vec3(0.0f, 1.5f, 0.0f);
-        cone1.scale = { 2.0f, 1.5f, 2.0f };
+        cone1.position = treePos + glm::vec3(0.0f, 2.0f, 0.0f);
+        cone1.scale = { 1.8f, 1.2f, 1.8f };
         cone1.color = { 0.1f, 0.4f, 0.15f };
-        drawMesh(cone, cone1, litProgram, 0.05f, 0.0f, 1.0f);
+        drawMeshUnlitWave(cone, cone1, cone1.color, 0.03f);
         
-        // Средний ярус
+        // Средний ярус (чуть сильнее колыхание)
         Entity cone2;
-        cone2.position = treePos + glm::vec3(0.0f, 2.5f, 0.0f);
-        cone2.scale = { 1.5f, 1.3f, 1.5f };
+        cone2.position = treePos + glm::vec3(0.0f, 3.0f, 0.0f);
+        cone2.scale = { 1.3f, 1.0f, 1.3f };
         cone2.color = { 0.1f, 0.45f, 0.15f };
-        drawMesh(cone, cone2, litProgram, 0.06f, 0.0f, 1.0f);
+        drawMeshUnlitWave(cone, cone2, cone2.color, 0.05f);
         
-        // Верхний ярус (самый узкий)
+        // Верхний ярус (самое сильное колыхание)
         Entity cone3;
-        cone3.position = treePos + glm::vec3(0.0f, 3.3f, 0.0f);
-        cone3.scale = { 1.0f, 1.2f, 1.0f };
+        cone3.position = treePos + glm::vec3(0.0f, 3.8f, 0.0f);
+        cone3.scale = { 0.8f, 0.8f, 0.8f };
         cone3.color = { 0.1f, 0.5f, 0.15f };
-        drawMesh(cone, cone3, litProgram, 0.07f, 0.0f, 1.0f);
+        drawMeshUnlitWave(cone, cone3, cone3.color, 0.08f);
     }
 
     // Звезда на верхушке ёлки (маленькая жёлтая сфера со свечением)
     Entity star;
-    star.position = treePos + glm::vec3(0.0f, 4.0f, 0.0f);
+    star.position = treePos + glm::vec3(0.0f, 4.5f, 0.0f);
     star.scale = { 0.4f, 0.4f, 0.4f };
     star.color = { 1.0f, 0.9f, 0.2f };
     drawMesh(sphere, star, litProgram, 0.0f, 0.8f, 1.0f);
 
-    // Ёлочные шары (разноцветные)
+    // Ёлочные шары (разноцветные) - размещены ближе к конусам ёлки
     const glm::vec3 ballColors[] = {
         {0.9f, 0.1f, 0.1f}, {0.1f, 0.1f, 0.9f}, {0.9f, 0.8f, 0.1f},
         {0.1f, 0.8f, 0.9f}, {0.9f, 0.1f, 0.9f}, {0.1f, 0.9f, 0.2f}
@@ -566,8 +622,10 @@ void Game::render(float time)
     for (int i = 0; i < 6; ++i)
     {
         float angle = i * PI / 3.0f;
-        float height = 1.8f + (i % 3) * 0.6f;
-        float radius = 1.2f - (i % 3) * 0.3f;
+        // Высота шаров на разных ярусах ёлки
+        float height = 1.5f + (i % 3) * 0.7f;
+        // Радиус уменьшается с высотой (соответствует форме конусов)
+        float radius = 0.7f - (i % 3) * 0.15f;
         Entity ball;
         ball.position = treePos + glm::vec3(std::cos(angle) * radius, height, std::sin(angle) * radius);
         ball.scale = { 0.2f, 0.2f, 0.2f };
@@ -634,11 +692,13 @@ void Game::render(float time)
     for (auto& t : targets)
     {
         if (!t.visible) continue;
+        // Мишень — площадка с красными кругами (оригинальный target)
         drawMesh(quad, t, targetProgram, 0.0f, 0.0f, 1.0f);
     }
 
     // Тень под дирижаблем (плоская проекция с учётом поворота)
     {
+        glEnable(GL_BLEND);
         float groundH = sampleHeight(terrainHeights, terrainGrid, airship.position.x, airship.position.z);
         
         // Матрица тени с учётом поворота дирижабля
@@ -662,6 +722,8 @@ void Game::render(float time)
         glBindVertexArray(sphere.vao);
         glDrawArrays(GL_TRIANGLES, 0, sphere.vertexCount);
         glBindVertexArray(0);
+
+        glDisable(GL_BLEND);
     }
 
     // ДИРИЖАБЛЬ (используем загруженную OBJ модель или fallback на примитивы)
@@ -672,8 +734,9 @@ void Game::render(float time)
 
     if (airshipModel.vertexCount > 0) {
         // Используем загруженную модель
-        // Временно отключаем culling для корректного отображения всех граней
+        // Временно отключаем culling для корректного отображения
         glDisable(GL_CULL_FACE);
+        glDisable(GL_BLEND);
         
         glm::mat4 bodyModel = glm::scale(asModel, glm::vec3(1.5f, 1.5f, 1.5f)); // Масштаб модели
         glm::mat4 mvp = cam.projection * cam.view * bodyModel;
@@ -684,13 +747,14 @@ void Game::render(float time)
         glUniformMatrix3fv(glGetUniformLocation(litProgram, "uNormalMatrix"), 1, GL_FALSE, glm::value_ptr(normal));
         glUniform3f(glGetUniformLocation(litProgram, "uColor"), airshipRender.color.x, airshipRender.color.y, airshipRender.color.z);
         glUniform1f(glGetUniformLocation(litProgram, "uWaveAmount"), 0.0f);
-        setCommonUniforms(litProgram, 0.05f, 1.0f); // Немного emission для яркости
+        setCommonUniforms(litProgram, 0.05f, 1.0f);
         glBindVertexArray(airshipModel.vao);
         glDrawArrays(GL_TRIANGLES, 0, airshipModel.vertexCount);
         glBindVertexArray(0);
         
         // Включаем culling обратно
         glEnable(GL_CULL_FACE);
+        // blending остаётся выключенным для непрозрачной геометрии
     } else {
         // Fallback: рисуем примитивами
         // Рисуем баллон (тело)
@@ -758,12 +822,126 @@ void Game::render(float time)
     }
 
 
+    // Декорации: первые 4 — домики, следующие 4 — маленькие ёлочки
     for (size_t i = 0; i < decorations.size(); ++i)
     {
         const auto& d = decorations[i];
-        // Первые 4 — кубы, остальные — конусы
-        const Mesh& mesh = (i < 4) ? cube : cone;
-        drawMesh(mesh, d, litProgram, 0.03f, 0.0f, 1.0f);
+        
+        if (i < 4) {
+            // Домик (тип декорации 1)
+            // Основание домика (стены)
+            Entity walls;
+            walls.position = d.position + glm::vec3(0.0f, 0.5f, 0.0f);
+            walls.scale = { 1.2f, 1.0f, 1.2f };
+            walls.color = { 0.9f, 0.85f, 0.7f }; // Бежевые стены
+            drawMeshUnlit(cube, walls, walls.color);
+            
+            // Крыша (конус) - высоко над стенами, не пересекается
+            Entity roof;
+            roof.position = d.position + glm::vec3(0.0f, 1.5f, 0.0f);
+            roof.scale = { 1.4f, 0.7f, 1.4f };
+            roof.color = { 0.7f, 0.2f, 0.15f }; // Красная крыша
+            drawMeshUnlit(cone, roof, roof.color);
+            
+            // Дверь - на передней стене
+            Entity door;
+            door.position = d.position + glm::vec3(0.0f, 0.35f, 0.62f);
+            door.scale = { 0.3f, 0.6f, 0.05f };
+            door.color = { 0.4f, 0.25f, 0.1f }; // Коричневая дверь
+            drawMeshUnlit(cube, door, door.color);
+            
+            // Окна (два маленьких квадрата)
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Entity window;
+                window.position = d.position + glm::vec3(side * 0.35f, 0.6f, 0.62f);
+                window.scale = { 0.2f, 0.2f, 0.05f };
+                window.color = { 0.6f, 0.8f, 1.0f }; // Голубое окно
+                drawMeshUnlit(cube, window, window.color);
+            }
+            
+            // Труба - торчит из крыши
+            Entity chimney;
+            chimney.position = d.position + glm::vec3(0.35f, 1.7f, 0.0f);
+            chimney.scale = { 0.15f, 0.4f, 0.15f };
+            chimney.color = { 0.5f, 0.3f, 0.2f }; // Коричневая труба
+            drawMeshUnlit(cube, chimney, chimney.color);
+            
+        } else {
+            // Маленькая ёлочка (тип декорации 2) с колыханием
+            // Ствол (не колышется)
+            Entity trunk;
+            trunk.position = d.position + glm::vec3(0.0f, 0.15f, 0.0f);
+            trunk.scale = { 0.12f, 0.3f, 0.12f };
+            trunk.color = { 0.35f, 0.2f, 0.1f };
+            drawMeshUnlit(cube, trunk, trunk.color);
+            
+            // Нижний ярус - лёгкое колыхание
+            Entity layer1;
+            layer1.position = d.position + glm::vec3(0.0f, 0.6f, 0.0f);
+            layer1.scale = { 0.6f, 0.4f, 0.6f };
+            layer1.color = { 0.1f, 0.4f, 0.15f };
+            drawMeshUnlitWave(cone, layer1, layer1.color, 0.04f);
+            
+            // Верхний ярус - чуть сильнее колыхание
+            Entity layer2;
+            layer2.position = d.position + glm::vec3(0.0f, 1.0f, 0.0f);
+            layer2.scale = { 0.4f, 0.35f, 0.4f };
+            layer2.color = { 0.1f, 0.45f, 0.15f };
+            drawMeshUnlitWave(cone, layer2, layer2.color, 0.06f);
+        }
+    }
+    
+    // Третий тип декораций: снеговики (добавим их отдельно)
+    for (int i = 0; i < 3; ++i)
+    {
+        glm::vec3 snowmanPos = glm::vec3(
+            std::cos(i * PI * 0.67f + 1.0f) * 12.0f,
+            0.0f,
+            std::sin(i * PI * 0.67f + 1.0f) * 12.0f
+        );
+        
+        // Нижний шар
+        Entity bottom;
+        bottom.position = snowmanPos + glm::vec3(0.0f, 0.5f, 0.0f);
+        bottom.scale = { 1.0f, 1.0f, 1.0f };
+        bottom.color = { 0.95f, 0.95f, 0.98f };
+        drawMeshUnlit(sphere, bottom, bottom.color);
+        
+        // Средний шар
+        Entity middle;
+        middle.position = snowmanPos + glm::vec3(0.0f, 1.2f, 0.0f);
+        middle.scale = { 0.7f, 0.7f, 0.7f };
+        middle.color = { 0.95f, 0.95f, 0.98f };
+        drawMeshUnlit(sphere, middle, middle.color);
+        
+        // Голова
+        Entity head;
+        head.position = snowmanPos + glm::vec3(0.0f, 1.75f, 0.0f);
+        head.scale = { 0.5f, 0.5f, 0.5f };
+        head.color = { 0.95f, 0.95f, 0.98f };
+        drawMeshUnlit(sphere, head, head.color);
+        
+        // Нос-морковка
+        Entity nose;
+        nose.position = snowmanPos + glm::vec3(0.0f, 1.75f, 0.28f);
+        nose.scale = { 0.08f, 0.08f, 0.25f };
+        nose.color = { 0.9f, 0.5f, 0.1f };
+        drawMeshUnlit(cone, nose, nose.color);
+        
+        // Шляпа (цилиндр из куба)
+        Entity hat;
+        hat.position = snowmanPos + glm::vec3(0.0f, 2.1f, 0.0f);
+        hat.scale = { 0.4f, 0.35f, 0.4f };
+        hat.color = { 0.1f, 0.1f, 0.1f };
+        drawMeshUnlit(cube, hat, hat.color);
+        
+        // Поля шляпы
+        Entity hatBrim;
+        hatBrim.position = snowmanPos + glm::vec3(0.0f, 1.95f, 0.0f);
+        hatBrim.scale = { 0.6f, 0.05f, 0.6f };
+        hatBrim.color = { 0.1f, 0.1f, 0.1f };
+        drawMeshUnlit(cube, hatBrim, hatBrim.color);
     }
 
     Entity parcelEntity;
@@ -797,6 +975,7 @@ void Game::render(float time)
     }
 
     // Облака с постоянным свечением (не зависят от освещения сцены)
+    glEnable(GL_BLEND);
     Entity cloudEntity;
     cloudEntity.color = { 1.0f, 1.0f, 1.0f };
     bool flash = std::fmod(time, 6.0f) < 0.5f;
@@ -821,6 +1000,9 @@ void Game::render(float time)
         basket.color = { 0.5f, 0.35f, 0.2f };
         drawMesh(cube, basket, litProgram, 0.0f, 0.0f, 1.0f);
     }
+
+    // На всякий случай возвращаем состояние blending к выключенному
+    glDisable(GL_BLEND);
 }
 
 GLuint Game::compileShader(GLenum type, const char* src) {
