@@ -268,17 +268,17 @@ void Game::update(float dt, float time)
     glm::vec3 move{ 0.0f };
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) move.z += 1.0f;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) move.z -= 1.0f;
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) move.x -= 1.0f;
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) move.x += 1.0f;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) move.x += 1.0f;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) move.x -= 1.0f;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::R)) move.y += 1.0f;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::F)) move.y -= 1.0f;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) yaw -= 1.5f * dt;
     if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) yaw += 1.5f * dt;
 
     glm::mat4 rot = glm::rotate(glm::mat4(1.0f), yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::vec3 dir = glm::normalize(glm::vec3(rot * glm::vec4(move, 0.0f)) + glm::vec3(0.0f, move.y, 0.0f));
     if (glm::length(move) > 0.0f)
     {
+        glm::vec3 dir = glm::normalize(glm::vec3(rot * glm::vec4(move, 0.0f)));
         airship.position += dir * dt * 6.0f;
     }
 
@@ -733,4 +733,13 @@ void Game::respawnTarget(Entity& target, const std::vector<Entity>& all, float g
             }
         }
     }
+}
+
+int main()
+{
+    Game game;
+    if (!game.init())
+        return -1;
+    game.run();
+    return 0;
 }
