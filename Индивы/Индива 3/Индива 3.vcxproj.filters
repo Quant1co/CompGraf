@@ -26,5 +26,12 @@
     <ClInclude Include="Game.hpp">
       <Filter>Исходные файлы</Filter>
     </ClInclude>
+    <ClInclude Include="Индивы\Индива 3\tiny_obj_loader.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="Индивы\Индива 3\airship.obj" />
+    <Object Include="Индивы\Индива 3\tree.obj" />
   </ItemGroup>
 </Project>
