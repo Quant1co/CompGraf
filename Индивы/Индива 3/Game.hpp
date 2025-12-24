@@ -80,6 +80,7 @@ private:
     glm::vec3 randomXZ(float range);
     bool overlaps(const Entity& a, const Entity& b);
     void respawnTarget(Entity& target, const std::vector<Entity>& all, float groundOffset);
+    Mesh makeFlag();
 
 private:
     sf::RenderWindow window;
@@ -93,6 +94,9 @@ private:
     Mesh terrain{};
     Mesh airshipModel{};
     Mesh treeModel{};
+    Mesh flag{};
+    GLuint flagProgram{};
+    std::vector<Entity> flags;
     std::vector<float> terrainHeights;
     int terrainGrid = 64;
     float terrainScale = 1.0f;
