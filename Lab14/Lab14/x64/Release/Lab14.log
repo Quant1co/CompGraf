@@ -1,0 +1,17 @@
+﻿  glad.c
+  Camera.cpp
+  main.cpp
+  Model.cpp
+  Shader.cpp
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003: Не удалось запустить указанный исполняемый файл задачи "CL.exe". System.IO.IOException: Процесс не может получить доступ к файлу "D:\ss\CompGraf\Lab14\Lab14\x64\Release\Lab14.tlog\CL.read.1.tlog", так как этот файл используется другим процессом.
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share, Int32 bufferSize, FileOptions options, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.StreamWriter.CreateFile(String path, Boolean append, Boolean checkHost)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.StreamWriter..ctor(String path, Boolean append, Encoding encoding, Int32 bufferSize, Boolean checkHost)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в System.IO.File.InternalWriteAllText(String path, String contents, Encoding encoding, Boolean checkHost)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в Microsoft.Build.Utilities.CanonicalTrackedInputFiles.SaveTlog(DependencyFilter includeInTLog)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в Microsoft.Build.CPPTasks.CL.PostExecuteTool(Int32 exitCode)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в Microsoft.Build.CPPTasks.TrackedVCToolTask.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в Microsoft.Build.CPPTasks.CL.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands)
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppCommon.targets(787,5): error MSB6003:    в Microsoft.Build.Utilities.ToolTask.Execute()

@@ -1,0 +1,169 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\ss\\CompGraf\\Lab14\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\fragment.glsl||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\fragment.glsl||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\vertex.glsl||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\vertex.glsl||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\Model.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\Shader.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\Shader.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\Camera.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\Camera.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\stb_image.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\stb_image.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{3B088344-751A-4278-AF7A-1C65C196024F}|Lab14\\Lab14.vcxproj|solutionrelative:Lab14\\Model.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 9,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "vertex.glsl",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\vertex.glsl",
+              "RelativeDocumentMoniker": "Lab14\\vertex.glsl",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\vertex.glsl",
+              "RelativeToolTip": "Lab14\\vertex.glsl",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-12-23T23:11:37.518Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Camera.cpp",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.cpp",
+              "RelativeDocumentMoniker": "Lab14\\Camera.cpp",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.cpp",
+              "RelativeToolTip": "Lab14\\Camera.cpp",
+              "ViewState": "AgIAABoAAAAAAAAAAAAYwDAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-12-23T23:09:34.421Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Camera.h",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.h",
+              "RelativeDocumentMoniker": "Lab14\\Camera.h",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Camera.h",
+              "RelativeToolTip": "Lab14\\Camera.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-12-23T23:00:04.098Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Model.h",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.h",
+              "RelativeDocumentMoniker": "Lab14\\Model.h",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.h",
+              "RelativeToolTip": "Lab14\\Model.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-12-23T23:00:02.057Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Shader.h",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Shader.h",
+              "RelativeDocumentMoniker": "Lab14\\Shader.h",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Shader.h",
+              "RelativeToolTip": "Lab14\\Shader.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-12-23T23:00:00.206Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "stb_image.h",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\stb_image.h",
+              "RelativeDocumentMoniker": "Lab14\\stb_image.h",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\stb_image.h",
+              "RelativeToolTip": "Lab14\\stb_image.h",
+              "ViewState": "AgIAAFkfAAAAAAAAAAAYwKUfAAACAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-12-23T22:52:45.431Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Model.cpp",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.cpp",
+              "RelativeDocumentMoniker": "Lab14\\Model.cpp",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\Model.cpp",
+              "RelativeToolTip": "Lab14\\Model.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-12-23T22:50:22.938Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "fragment.glsl",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\fragment.glsl",
+              "RelativeDocumentMoniker": "Lab14\\fragment.glsl",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\fragment.glsl",
+              "RelativeToolTip": "Lab14\\fragment.glsl",
+              "ViewState": "AgIAAJQAAAAAAAAAAAD4v58AAAAWAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-12-23T23:11:46.711Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "main.cpp",
+              "DocumentMoniker": "D:\\ss\\CompGraf\\Lab14\\Lab14\\main.cpp",
+              "RelativeDocumentMoniker": "Lab14\\main.cpp",
+              "ToolTip": "D:\\ss\\CompGraf\\Lab14\\Lab14\\main.cpp",
+              "RelativeToolTip": "Lab14\\main.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAHAAAABEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-12-23T22:27:00.496Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

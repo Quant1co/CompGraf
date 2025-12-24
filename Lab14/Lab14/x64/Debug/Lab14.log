@@ -1,0 +1,12 @@
+﻿  main.cpp
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,55): warning C4244: аргумент: преобразование "T" в "float", возможна потеря данных
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,55): warning C4244:         with
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,55): warning C4244:         [
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,55): warning C4244:             T=int
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,55): warning C4244:         ]
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,39): warning C4244: аргумент: преобразование "T" в "float", возможна потеря данных
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,39): warning C4244:         with
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,39): warning C4244:         [
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,39): warning C4244:             T=int
+D:\ss\CompGraf\Lab14\Lab14\main.cpp(49,39): warning C4244:         ]
+  Lab14.vcxproj -> D:\ss\CompGraf\Lab14\x64\Debug\Lab14.exe

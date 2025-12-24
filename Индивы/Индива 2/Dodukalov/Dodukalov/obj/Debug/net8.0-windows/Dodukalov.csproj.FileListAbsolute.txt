@@ -1,0 +1,17 @@
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\bin\Debug\net8.0-windows\Dodukalov.exe
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\bin\Debug\net8.0-windows\Dodukalov.deps.json
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\bin\Debug\net8.0-windows\Dodukalov.runtimeconfig.json
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\bin\Debug\net8.0-windows\Dodukalov.dll
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\bin\Debug\net8.0-windows\Dodukalov.pdb
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.GeneratedMSBuildEditorConfig.editorconfig
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.AssemblyInfoInputs.cache
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.AssemblyInfo.cs
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.csproj.CoreCompileInputs.cache
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.sourcelink.json
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.dll
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\refint\Dodukalov.dll
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.pdb
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.genruntimeconfig.cache
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\ref\Dodukalov.dll
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.Form1.resources
+D:\ss\CompGraf\Индивы\Индива 2\Dodukalov\Dodukalov\obj\Debug\net8.0-windows\Dodukalov.csproj.GenerateResource.cache
